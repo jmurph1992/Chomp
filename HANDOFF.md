@@ -9,7 +9,7 @@
 2026-05-06
 
 ## Current Phase
-**Monorepo scaffolded. DB migration pending — must be run locally.**
+**DB migrations complete. Ready to wire up Clerk auth.**
 
 ---
 
@@ -50,6 +50,9 @@ Chomp/
 │   └── web/                  # Next.js 15 app (App Router)
 ├── packages/
 │   ├── db/                   # Prisma schema, migrations, db client singleton
+│   │   └── prisma/
+│   │       └── migrations/   # ✅ All three migrations applied to Neon
+├── packages/
 │   ├── types/                # Shared TypeScript types
 │   └── utils/                # Shared utility functions
 ├── docs/
@@ -76,7 +79,8 @@ Chomp/
 ```bash
 git clone <repo-url>
 cd Chomp
-nvm use          # switches to Node 24.15.0 via .nvmrc
+asdf install         # installs Node 24.15.0 from .tool-versions (if using asdf)
+# or: nvm use       # switches to Node 24.15.0 via .nvmrc (if using nvm)
 pnpm install
 ```
 
@@ -91,57 +95,37 @@ Fill in `.env.local` with:
 Both are available in the Neon dashboard under **Connect → Connection string**.
 Toggle "Pooled connection" on/off to get each one.
 
-### 3. Run the database migration
+### 3. Apply migrations (already run — Neon DB is live)
+Migrations are committed and the Neon database is already in sync.
+For a fresh environment or new developer, run:
 ```bash
 cd packages/db
 pnpm db:migrate
 ```
-This runs `prisma migrate dev` and will prompt for a migration name — use `init`.
+Prisma will detect the existing migrations and apply them in order. No manual SQL needed.
 
-### 4. Run the PostGIS spatial index migration
-After the main migration completes, a second migration is needed for the partial
-GiST index (Prisma can't express this in the schema file). Run:
+> **Note:** The Neon DB already has all three migrations applied. Only run this
+> if you're setting up a brand new database.
+
+### 4. Start the dev server
 ```bash
-pnpm db:migrate
-```
-Name it `add_gist_index`. Prisma will open the migration file for you to edit —
-paste this SQL into it before confirming:
-```sql
-CREATE INDEX ON truck_locations USING GIST (geom) WHERE is_current = true;
-```
-
-### 5. Run the feed materialized view migration
-Run one more migration — name it `add_feed_view` — with this SQL:
-```sql
-CREATE MATERIALIZED VIEW feed_items AS
-  SELECT 'review' AS type, r.id AS item_id, r.truck_id, r.user_id,
-    r.rating, r.body AS content, null::text AS image_url, r.created_at
-  FROM reviews r
-  WHERE r.rating >= 4 AND r.created_at > now() - interval '30 days' AND r.is_visible = true
-  UNION ALL
-  SELECT 'photo' AS type, rp.id AS item_id, rp.truck_id, rp.user_id,
-    null::int AS rating, rp.caption AS content, rp.url AS image_url, rp.created_at
-  FROM review_photos rp
-  WHERE rp.likes_count >= 2 AND rp.created_at > now() - interval '30 days'
-  ORDER BY created_at DESC;
-
-CREATE INDEX ON feed_items (truck_id, created_at DESC);
-```
-
-### 6. Start the dev server
-```bash
-cd apps/web
-pnpm dev
-# or from root:
 pnpm dev
 ```
 
 ---
 
 ## Open Items (next things to build)
-1. **DB migration** — must be run locally (see steps above). This environment cannot reach external databases on port 5432.
-2. **Clerk auth setup** — install `@clerk/nextjs`, wrap layout in `<ClerkProvider>`, add middleware, create webhook to sync users to `users` table
-3. **Feature development** — map view is the core customer experience, start there after auth is wired up
+1. **Clerk auth setup** — install `@clerk/nextjs`, wrap layout in `<ClerkProvider>`, add middleware, create webhook to sync users to `users` table
+2. **Feature development** — map view is the core customer experience, start there after auth is wired up
+
+---
+
+## Migrations Applied (all on Neon dev DB)
+| Migration | What it does |
+|---|---|
+| `20260506222654_init` | Enables PostGIS, creates all tables, enums, indexes, and foreign keys |
+| `20260506222917_add_gist_index` | Partial GiST index on `truck_locations.geom WHERE is_current = true` |
+| `20260506223040_add_feed_view` | `feed_items` materialized view + index for the public feed |
 
 ---
 
@@ -150,6 +134,7 @@ pnpm dev
 - `/docs/architecture/stack.md` — all tech decisions
 - `/docs/architecture/schema.md` — full DB schema with design notes
 - `/packages/db/prisma/schema.prisma` — Prisma schema (source of truth for DB)
+- `/packages/db/prisma/migrations/` — all applied migration SQL files
 - `/packages/db/src/index.ts` — Prisma client singleton
 - `/.env.example` — all required environment variables
 - `/CLAUDE.md` — rules Claude must follow on this project
@@ -161,3 +146,6 @@ pnpm dev
 - The Prisma client is generated into `node_modules` — run `pnpm db:generate` after any schema changes.
 - PostGIS `geography(Point, 4326)` columns use `Unsupported()` in Prisma — all geospatial queries (`ST_DWithin`, `ST_Distance`) must use `prisma.$queryRaw`.
 - The `feed_items` materialized view must be refreshed by an Inngest background job (not yet built) — never compute inline.
+- `CREATE EXTENSION IF NOT EXISTS postgis;` is included at the top of the `init` migration — any fresh DB will get PostGIS automatically.
+- Node 24.15.0 is required. Managed via asdf (`.tool-versions` in home dir) and nvm (`.nvmrc` in project root).
+- When running `prisma migrate` from Claude Code, Prisma requires explicit user consent via `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` env var for destructive operations (`reset`, `drop`).

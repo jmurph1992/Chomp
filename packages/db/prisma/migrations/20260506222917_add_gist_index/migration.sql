@@ -1,0 +1,1 @@
+CREATE INDEX ON truck_locations USING GIST (geom) WHERE is_current = true;
