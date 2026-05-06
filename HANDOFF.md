@@ -46,7 +46,7 @@ Domains: users, trucks, truck_operators, truck_locations, truck_schedules, menu_
 - `go-live-requirements/` — empty, for pre-launch checklist
 
 ## Open Decisions (need answer before coding starts)
-1. **ORM**: Prisma or Drizzle? Drizzle recommended due to PostGIS usage — Prisma requires raw SQL for geospatial queries.
+1. **ORM**: ~~Prisma or Drizzle?~~ **Resolved: Prisma.** Geospatial queries are simple enough that `$queryRaw` for PostGIS is acceptable.
 2. **pnpm workspaces**: Assumed for monorepo — confirm before scaffolding.
 3. **Auth provider**: Clerk confirmed.
 

@@ -26,7 +26,7 @@ Chomp is a Next.js monorepo targeting web first, with native mobile apps planned
 | Language | TypeScript (strict) | Type safety across the full stack |
 | Styling | Tailwind CSS + shadcn/ui | Fast, consistent UI |
 | Database | PostgreSQL + PostGIS on Neon | Geospatial queries; serverless Postgres; existing account |
-| ORM | TBD (Prisma or Drizzle) | See decision note below |
+| ORM | Prisma | Great DX + migrations; raw SQL via `$queryRaw` for PostGIS queries only |
 | Cache | Redis | 30-min location snapshots; feed cache |
 | Background Jobs | Inngest | Serverless-friendly; no Redis queue management |
 | Auth | Clerk | Operator/customer/admin roles; best DX |
@@ -39,18 +39,11 @@ Chomp is a Next.js monorepo targeting web first, with native mobile apps planned
 | Package Manager | pnpm workspaces | Monorepo support |
 | Testing | Vitest (unit) + Playwright (E2E) | |
 
-## Open Decisions
-
-### ORM: Prisma vs Drizzle
-Prisma has excellent DX and is very mature but does not natively support PostGIS types —
-geospatial queries require `prisma.$queryRaw`. Drizzle is SQL-first and handles PostGIS
-more naturally, which matters given how central location queries are to this app.
-**Decision pending.**
-
 ## Key Architectural Decisions
 
 - **No microservices to start.** Monorepo Next.js app until a clear bottleneck forces a split.
 - **No WebSockets.** 30-min location polling via Redis cache is sufficient. Revisit if real-time requirements change.
+- **ORM is Prisma.** All queries through Prisma; `$queryRaw` is reserved for PostGIS geospatial queries (`ST_DWithin`, `ST_Distance`) which Prisma cannot express natively.
 - **No inline SQL.** All queries through the ORM; raw queries only for PostGIS where unavoidable.
 - **No `useEffect` for data fetching.** Use React Server Components or SWR/React Query.
 - **Images always through Cloudflare Images.** Never serve raw R2 uploads to the client.
