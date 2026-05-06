@@ -1,0 +1,249 @@
+// Chomp database schema
+// ORM: Prisma 6 + PostgreSQL + PostGIS on Neon
+// Note: PostGIS geography types use Unsupported() — geospatial queries
+//       (ST_DWithin, ST_Distance) must use prisma.$queryRaw
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // Neon requires a direct URL for migrations
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  customer
+  operator
+  admin
+}
+
+enum OperatorRole {
+  owner
+  manager
+}
+
+// ─── Users ───────────────────────────────────────────────────────────────────
+
+/// Mirrors Clerk users into the DB for relational data.
+/// Created/updated via Clerk webhook on user.created / user.updated events.
+model User {
+  id          String   @id @default(uuid())
+  clerkId     String   @unique @map("clerk_id")
+  email       String   @unique
+  role        UserRole @default(customer)
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  ownedTrucks    Truck[]         @relation("TruckOwner")
+  truckOperators TruckOperator[]
+  reviews        Review[]
+  reviewPhotos   ReviewPhoto[]
+  photoLikes     PhotoLike[]
+
+  @@map("users")
+}
+
+// ─── Trucks ──────────────────────────────────────────────────────────────────
+
+/// Core truck profile. One truck can have multiple operators (owner + managers).
+model Truck {
+  id          String   @id @default(uuid())
+  ownerId     String   @map("owner_id")
+  name        String
+  slug        String   @unique // SEO-friendly URL: /trucks/taco-kings
+  description String?
+  cuisineType String[] @map("cuisine_type") // e.g. ['mexican', 'fusion']
+  phone       String?
+  website     String?
+  instagram   String?
+  logoUrl     String?  @map("logo_url")
+  coverUrl    String?  @map("cover_url")
+  isVerified  Boolean  @default(false) @map("is_verified") // set by admin
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  owner          User            @relation("TruckOwner", fields: [ownerId], references: [id])
+  operators      TruckOperator[]
+  locations      TruckLocation[]
+  schedules      TruckSchedule[]
+  menuCategories MenuCategory[]
+  menuItems      MenuItem[]
+  events         TruckEvent[]
+  reviews        Review[]
+  reviewPhotos   ReviewPhoto[]
+
+  @@map("trucks")
+}
+
+/// Allows one user to manage multiple trucks, or multiple users to co-manage one truck.
+model TruckOperator {
+  truckId String       @map("truck_id")
+  userId  String       @map("user_id")
+  role    OperatorRole @default(owner)
+
+  truck Truck @relation(fields: [truckId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@id([truckId, userId])
+  @@map("truck_operators")
+}
+
+// ─── Location ─────────────────────────────────────────────────────────────────
+
+/// Each row is a location report. Only one row per truck should have isCurrent = true.
+/// Previous rows are kept as history. A partial GiST index is maintained in a
+/// migration on the geom column WHERE is_current = true for fast spatial queries.
+model TruckLocation {
+  id         String                                  @id @default(uuid())
+  truckId    String                                  @map("truck_id")
+  geom       Unsupported("geography(Point, 4326)")?  // PostGIS point (lng, lat)
+  address    String?
+  city       String?
+  state      String?
+  zip        String?
+  isCurrent  Boolean   @default(true) @map("is_current")
+  reportedAt DateTime  @default(now()) @map("reported_at")
+  expiresAt  DateTime? @map("expires_at")
+
+  truck Truck @relation(fields: [truckId], references: [id])
+
+  @@map("truck_locations")
+}
+
+// ─── Schedules ────────────────────────────────────────────────────────────────
+
+/// Supports both recurring weekly schedules (dayOfWeek set) and one-off dates (specificDate set).
+/// A row with dayOfWeek = 2 and no specificDate means "every Tuesday".
+model TruckSchedule {
+  id           String                                  @id @default(uuid())
+  truckId      String                                  @map("truck_id")
+  dayOfWeek    Int?                                    @map("day_of_week") // 0=Sun, 6=Sat
+  specificDate DateTime?                               @map("specific_date") @db.Date
+  startTime    DateTime?                               @map("start_time") @db.Time(6)
+  endTime      DateTime?                               @map("end_time") @db.Time(6)
+  locationNote String?                                 @map("location_note")
+  address      String?
+  geom         Unsupported("geography(Point, 4326)")?
+  isCancelled  Boolean   @default(false) @map("is_cancelled")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  truck Truck @relation(fields: [truckId], references: [id])
+
+  @@map("truck_schedules")
+}
+
+// ─── Menus ────────────────────────────────────────────────────────────────────
+
+/// Top-level grouping for menu items (e.g. Tacos, Drinks, Sides).
+model MenuCategory {
+  id           String @id @default(uuid())
+  truckId      String @map("truck_id")
+  name         String
+  displayOrder Int    @default(0) @map("display_order")
+
+  truck Truck      @relation(fields: [truckId], references: [id])
+  items MenuItem[]
+
+  @@map("menu_categories")
+}
+
+/// Individual items within a menu category.
+/// dietaryFlags supports client-side filtering (vegan, gluten-free, spicy, etc.)
+model MenuItem {
+  id           String   @id @default(uuid())
+  categoryId   String   @map("category_id")
+  truckId      String   @map("truck_id")
+  name         String
+  description  String?
+  price        Decimal? @db.Decimal(8, 2)
+  imageUrl     String?  @map("image_url")
+  isAvailable  Boolean  @default(true) @map("is_available")
+  isFeatured   Boolean  @default(false) @map("is_featured")
+  dietaryFlags String[] @map("dietary_flags")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  category MenuCategory @relation(fields: [categoryId], references: [id])
+  truck    Truck        @relation(fields: [truckId], references: [id])
+
+  @@map("menu_items")
+}
+
+// ─── Reviews & Photos ─────────────────────────────────────────────────────────
+
+/// One review per user per truck enforced by unique constraint.
+/// isVisible lets admins hide abusive content without deleting it.
+/// rating must be 1-5 — enforced at the application layer (Prisma has no CHECK support).
+model Review {
+  id        String   @id @default(uuid())
+  truckId   String   @map("truck_id")
+  userId    String   @map("user_id")
+  rating    Int      // 1-5; validated in API before write
+  body      String?
+  isVisible Boolean  @default(true) @map("is_visible")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  truck  Truck         @relation(fields: [truckId], references: [id])
+  user   User          @relation(fields: [userId], references: [id])
+  photos ReviewPhoto[]
+
+  @@unique([truckId, userId])
+  @@map("reviews")
+}
+
+/// Photos uploaded by customers alongside their reviews.
+/// truckId is denormalized here to avoid a join when querying the feed.
+/// likesCount is a denormalized counter — incremented/decremented by PhotoLike inserts/deletes.
+model ReviewPhoto {
+  id         String   @id @default(uuid())
+  reviewId   String   @map("review_id")
+  userId     String   @map("user_id")
+  truckId    String   @map("truck_id")
+  url        String
+  caption    String?
+  likesCount Int      @default(0) @map("likes_count")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  review Review      @relation(fields: [reviewId], references: [id])
+  user   User        @relation(fields: [userId], references: [id])
+  truck  Truck       @relation(fields: [truckId], references: [id])
+  likes  PhotoLike[]
+
+  @@map("review_photos")
+}
+
+/// Join table for photo likes. Composite PK prevents duplicate likes.
+model PhotoLike {
+  photoId   String   @map("photo_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  photo ReviewPhoto @relation(fields: [photoId], references: [id])
+  user  User        @relation(fields: [userId], references: [id])
+
+  @@id([photoId, userId])
+  @@map("photo_likes")
+}
+
+// ─── Events ───────────────────────────────────────────────────────────────────
+
+/// Special truck appearances and events. Planned feature — not yet wired to the UI.
+model TruckEvent {
+  id          String                                  @id @default(uuid())
+  truckId     String                                  @map("truck_id")
+  title       String
+  description String?
+  startsAt    DateTime?                               @map("starts_at")
+  endsAt      DateTime?                               @map("ends_at")
+  address     String?
+  geom        Unsupported("geography(Point, 4326)")?
+  createdAt   DateTime                                @default(now()) @map("created_at")
+
+  truck Truck @relation(fields: [truckId], references: [id])
+
+  @@map("truck_events")
+}

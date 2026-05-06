@@ -1,0 +1,36 @@
+{
+  "name": "@chomp/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@chomp/db": "workspace:*",
+    "@chomp/types": "workspace:*",
+    "@chomp/utils": "workspace:*",
+    "next": "^15",
+    "react": "^19",
+    "react-dom": "^19",
+    "clsx": "^2",
+    "tailwind-merge": "^2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4",
+    "tailwindcss": "^4",
+    "@tailwindcss/postcss": "^4",
+    "typescript": "^5",
+    "vitest": "^3"
+  }
+}

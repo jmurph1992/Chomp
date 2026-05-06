@@ -9,7 +9,7 @@
 2026-05-06
 
 ## Current Phase
-**Pre-development planning** — no code written yet.
+**Monorepo scaffolded** — structure, config, and base files in place. Next: Neon DB + Clerk setup.
 
 ## What Was Decided This Session
 
@@ -45,17 +45,13 @@ Domains: users, trucks, truck_operators, truck_locations, truck_schedules, menu_
 - `known-issues/` — empty, for tracked bugs outside tickets
 - `go-live-requirements/` — empty, for pre-launch checklist
 
-## Open Decisions (need answer before coding starts)
-1. **ORM**: ~~Prisma or Drizzle?~~ **Resolved: Prisma.** Geospatial queries are simple enough that `$queryRaw` for PostGIS is acceptable.
-2. **pnpm workspaces**: Assumed for monorepo — confirm before scaffolding.
-3. **Auth provider**: Clerk confirmed.
+## Open Decisions
+All resolved. None outstanding.
 
 ## Next Steps (in order)
-1. Resolve open decisions above
-2. Scaffold monorepo structure (`/apps/web`, `/packages/db`, `/packages/types`, `/packages/utils`)
-3. Set up Neon DB + PostGIS + run initial schema migration
-4. Set up Clerk auth + user sync to DB
-5. Begin feature development (map view likely first — it's the core customer experience)
+1. Connect Neon DB — add `DATABASE_URL` + `DIRECT_URL` to `.env.local`, run `prisma generate` from `packages/db`, then run first migration
+2. Set up Clerk — install `@clerk/nextjs`, wrap layout in `<ClerkProvider>`, add middleware, create webhook to sync users to DB
+3. Begin feature development (map view is the core customer experience — start there)
 
 ## Key Files to Review
 - `/docs/README.md` — start here for orientation

@@ -1,0 +1,66 @@
+/**
+ * Shared utility functions used across web and (future) mobile apps.
+ * Keep this package dependency-free where possible.
+ */
+
+// ─── Slugs ────────────────────────────────────────────────────────────────────
+
+/**
+ * Converts a truck name to a URL-safe slug.
+ * e.g. "Taco King's!" → "taco-kings"
+ */
+export function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+// ─── Formatting ───────────────────────────────────────────────────────────────
+
+/**
+ * Formats a price in cents as a USD currency string.
+ * e.g. 1250 → "$12.50"
+ */
+export function formatPrice(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(cents / 100)
+}
+
+/**
+ * Returns a human-readable relative time string.
+ * e.g. "2 hours ago", "3 days ago"
+ */
+export function timeAgo(date: Date | string): string {
+  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+  const diff = (new Date(date).getTime() - Date.now()) / 1000
+
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ['year', 31536000],
+    ['month', 2592000],
+    ['week', 604800],
+    ['day', 86400],
+    ['hour', 3600],
+    ['minute', 60],
+    ['second', 1],
+  ]
+
+  for (const [unit, seconds] of units) {
+    if (Math.abs(diff) >= seconds) {
+      return rtf.format(Math.round(diff / seconds), unit)
+    }
+  }
+
+  return 'just now'
+}
+
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+/** Returns true if a rating value is valid (integer 1–5). */
+export function isValidRating(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 5
+}
