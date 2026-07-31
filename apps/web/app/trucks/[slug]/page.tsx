@@ -1,7 +1,15 @@
 import { notFound } from 'next/navigation'
 import { getTruckBySlug } from '@/lib/trucks'
 import { getTodaysScheduleEntries } from '@/lib/schedule'
+import { getCurrentUser } from '@/lib/auth'
+import {
+  canModerateReviews,
+  getOwnReview,
+  getReviewSummary,
+  getVisibleReviewsForTruck,
+} from '@/lib/reviews'
 import { TruckMenu } from '@/components/truck-menu'
+import { TruckReviews } from '@/components/truck-reviews'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -16,6 +24,13 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
   if (!truck) notFound()
 
   const todaysSchedule = getTodaysScheduleEntries(truck.schedule)
+
+  const currentUser = await getCurrentUser()
+  const [reviews, reviewSummary, ownReview] = await Promise.all([
+    getVisibleReviewsForTruck(truck.id),
+    getReviewSummary(truck.id),
+    currentUser ? getOwnReview(truck.id, currentUser.id) : Promise.resolve(null),
+  ])
 
   return (
     <main className="mx-auto max-w-2xl p-8">
@@ -61,6 +76,15 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
       )}
 
       <TruckMenu menu={truck.menu} />
+
+      <TruckReviews
+        truckId={truck.id}
+        slug={truck.slug}
+        reviews={reviews}
+        summary={reviewSummary}
+        ownReview={ownReview}
+        isAdmin={canModerateReviews(currentUser?.role)}
+      />
     </main>
   )
 }

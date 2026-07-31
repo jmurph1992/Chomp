@@ -9,7 +9,7 @@
 2026-07-31
 
 ## Current Phase
-**Clerk auth, map view, and truck detail page (profile + schedule + menu) wired up — all code-complete, need real Clerk/Mapbox credentials and a seeded DB to actually run/deploy.**
+**Clerk auth, map view, and truck detail page (profile + schedule + menu + reviews) wired up — all code-complete, need real Clerk/Mapbox credentials and a seeded DB to actually run/deploy.**
 
 ---
 
@@ -131,9 +131,11 @@ pnpm dev
    real decision before launch.
 5. **Operator upgrade flow** — nothing self-service exists yet to go from `customer` to
    `operator`; every new user is `customer` by default.
-6. **Feature development after this** — reviews/photos, the public feed, and the
-   operator dashboard (including menu CRUD, which was deliberately deferred — see
-   the Menu section below) are all still unbuilt.
+6. **Review submission rate limiting + a real moderation queue** — both deliberately
+   deferred this session, see `/go-live-requirements/reviews.md`.
+7. **Feature development after this** — photo upload (blocked on Cloudflare R2/
+   Images), the public feed, and the operator dashboard (menu CRUD + moderation
+   queue would both live there) are all still unbuilt.
 
 ## Auth
 - Clerk wired up: `apps/web/middleware.ts` (route protection), `ClerkProvider` in
@@ -174,19 +176,33 @@ pnpm dev
 - Price formatting: `MenuItem.price` is whole-dollar `Decimal(8,2)`, not cents —
   use `formatUsd` (`packages/utils`), not `formatPrice` (which assumes cents and
   would silently be wrong here).
+- Reviews (`apps/web/components/truck-reviews.tsx` + `apps/web/lib/reviews.ts` +
+  `apps/web/app/actions/reviews.ts`): rating + optional text, one per user per
+  truck (upsert on resubmit), edit/delete own review, average rating + count.
+  Every write action re-derives the acting user from the Clerk session
+  server-side — the client never sends a user id or role. A minimal admin
+  "Hide" action exists (`role === 'admin'`, checked server-side) but it's
+  one-way from this page — no unhide UI, no moderation queue yet. No photo
+  upload (blocked on Cloudflare R2/Images) and no rate limiting yet — both
+  tracked in `/go-live-requirements/reviews.md`.
 - `packages/db/prisma/seed.ts` — manual-only seed script (`pnpm db:seed`), ~6 fake
   trucks around Austin, TX matching the map's default region; "Taco Kings" and
   "Pho Real" have full menus (including one unavailable item and mixed dietary
-  flags) to exercise both behaviors.
-- Full details and scope cuts are in `/docs/features/truck-detail.md`.
+  flags) and reviews (including one hidden review on Taco Kings) to exercise all
+  of the above.
+- Full details and scope cuts are in `/docs/features/truck-detail.md` (profile/
+  schedule/menu) and `/docs/features/reviews.md` (reviews).
 
-## Testing infra (this session + last)
+## Testing infra (this session + earlier)
 - Vitest configs added for `apps/web` and `packages/utils`; Playwright config for
-  `apps/web`. 36 unit tests total (webhook handler, geo validation, schedule
-  filtering, truck queries, menu filtering, shared utils).
+  `apps/web`. 57 unit tests total (webhook handler, geo validation, schedule
+  filtering, truck queries, menu filtering, reviews queries + actions, shared utils).
 - `apps/web/e2e/auth.spec.ts`, `map.spec.ts`, and `truck-detail.spec.ts` each have
   specs that only run once real Clerk/Mapbox/DB env vars and seed data are present
-  — see the "Testing" section of the corresponding `/docs/features/*.md`.
+  — see the "Testing" section of the corresponding `/docs/features/*.md`. Actually
+  submitting a review as a signed-in user isn't e2e-tested yet — needs real Clerk
+  test credentials (`@clerk/testing`), same prerequisite as the auth spec's sign-in
+  widget test.
 - `next lint` is not usable as-is — this repo has no ESLint config yet, and running
   it interactively prompts to generate one (and will silently reformat/mutate
   `tsconfig.json` if you let it). Left alone; worth setting up deliberately later

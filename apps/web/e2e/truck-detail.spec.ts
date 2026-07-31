@@ -42,3 +42,27 @@ test.describe('truck menu', () => {
     await expect(page.getByText('Al Pastor')).toHaveCount(0)
   })
 })
+
+test.describe('truck reviews', () => {
+  test.skip(!canRun, 'requires DATABASE_URL and seeded data')
+
+  test('renders visible reviews and the average rating, excluding hidden ones', async ({
+    page,
+  }) => {
+    await page.goto(`/trucks/${SEEDED_SLUG}`)
+
+    await expect(page.getByRole('heading', { name: 'Reviews' })).toBeVisible()
+    await expect(page.getByText('Best tacos in Austin, hands down.')).toBeVisible()
+    // Seeded as isVisible: false — must never render.
+    await expect(page.getByText('Rude at the window')).toHaveCount(0)
+  })
+
+  test('prompts a signed-out visitor to sign in instead of showing the form', async ({
+    page,
+  }) => {
+    await page.goto(`/trucks/${SEEDED_SLUG}`)
+
+    await expect(page.getByText('to write a review')).toBeVisible()
+    await expect(page.getByPlaceholder('Optional — tell others what you thought')).toHaveCount(0)
+  })
+})

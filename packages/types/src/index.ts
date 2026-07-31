@@ -88,6 +88,26 @@ export type TruckDetail = {
   menu: MenuCategoryView[]
 }
 
+// ─── Reviews ──────────────────────────────────────────────────────────────────
+
+/** A single review as shown on a truck's detail page. */
+export type ReviewView = {
+  id: string
+  truckId: string
+  userId: string
+  userDisplayName: string | null
+  userAvatarUrl: string | null
+  rating: number
+  body: string | null
+  isVisible: boolean
+  createdAt: string
+}
+
+export type ReviewSummary = {
+  averageRating: number | null
+  reviewCount: number
+}
+
 // ─── Feed ─────────────────────────────────────────────────────────────────────
 
 export type FeedItemType = 'review' | 'photo'

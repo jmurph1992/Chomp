@@ -18,7 +18,18 @@ type SeedMenuItem = {
   imageUrl?: string
 }
 type SeedMenuCategory = { name: string; items: SeedMenuItem[] }
-type SeedTruck = { name: string; cuisine: string[]; lat: number; lng: number; menu: SeedMenuCategory[] }
+type SeedReview = { reviewer: string; rating: number; body?: string; isVisible?: boolean }
+type SeedTruck = {
+  name: string
+  cuisine: string[]
+  lat: number
+  lng: number
+  menu: SeedMenuCategory[]
+  reviews: SeedReview[]
+}
+
+// Fake customers who leave reviews — distinct from truck owners.
+const REVIEWERS = ['alice', 'bilal']
 
 // [name, cuisine, lat, lng offset from downtown Austin, optional menu]
 const TRUCKS: SeedTruck[] = [
@@ -60,6 +71,10 @@ const TRUCKS: SeedTruck[] = [
         ],
       },
     ],
+    reviews: [
+      { reviewer: 'alice', rating: 5, body: 'Best tacos in Austin, hands down.' },
+      { reviewer: 'bilal', rating: 2, body: 'Rude at the window', isVisible: false },
+    ],
   },
   {
     name: 'Pho Real',
@@ -75,6 +90,7 @@ const TRUCKS: SeedTruck[] = [
         ],
       },
     ],
+    reviews: [{ reviewer: 'bilal', rating: 4, body: 'Solid broth, generous portions.' }],
   },
   {
     name: 'Waffle Wagon',
@@ -82,16 +98,32 @@ const TRUCKS: SeedTruck[] = [
     lat: 30.263,
     lng: -97.749,
     menu: [],
+    reviews: [],
   },
-  { name: 'Curry Up', cuisine: ['indian'], lat: 30.2755, lng: -97.7404, menu: [] },
+  {
+    name: 'Curry Up',
+    cuisine: ['indian'],
+    lat: 30.2755,
+    lng: -97.7404,
+    menu: [],
+    reviews: [],
+  },
   {
     name: 'Smokehouse on Wheels',
     cuisine: ['bbq'],
     lat: 30.259,
     lng: -97.7355,
     menu: [],
+    reviews: [],
   },
-  { name: 'Slice Truck', cuisine: ['pizza'], lat: 30.2695, lng: -97.7502, menu: [] },
+  {
+    name: 'Slice Truck',
+    cuisine: ['pizza'],
+    lat: 30.2695,
+    lng: -97.7502,
+    menu: [],
+    reviews: [],
+  },
 ]
 
 function slugify(name: string): string {
@@ -103,6 +135,21 @@ function slugify(name: string): string {
 }
 
 async function main() {
+  const reviewers = new Map<string, { id: string }>()
+  for (const reviewer of REVIEWERS) {
+    const user = await db.user.upsert({
+      where: { clerkId: `seed_customer_${reviewer}` },
+      update: {},
+      create: {
+        clerkId: `seed_customer_${reviewer}`,
+        email: `${reviewer}@seed.chomp.local`,
+        role: 'customer',
+        displayName: reviewer[0]!.toUpperCase() + reviewer.slice(1),
+      },
+    })
+    reviewers.set(reviewer, user)
+  }
+
   for (const truck of TRUCKS) {
     const slug = slugify(truck.name)
 
@@ -201,6 +248,23 @@ async function main() {
           },
         })
       }
+    }
+
+    for (const review of truck.reviews) {
+      const reviewer = reviewers.get(review.reviewer)
+      if (!reviewer) throw new Error(`Unknown seed reviewer: ${review.reviewer}`)
+
+      await db.review.upsert({
+        where: { truckId_userId: { truckId: createdTruck.id, userId: reviewer.id } },
+        update: {},
+        create: {
+          truckId: createdTruck.id,
+          userId: reviewer.id,
+          rating: review.rating,
+          body: review.body ?? null,
+          isVisible: review.isVisible ?? true,
+        },
+      })
     }
   }
 
