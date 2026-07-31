@@ -9,7 +9,7 @@
 ## Features
 | Document | Status | Description |
 |---|---|---|
-| *(none yet)* | — | Features will be documented here as they are built |
+| [Auth](./features/auth.md) | Done | Clerk sign-in/sign-up, session middleware, and DB user sync |
 
 ---
 

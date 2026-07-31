@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-05-06
+2026-07-31
 
 ## Current Phase
-**DB migrations complete. Ready to wire up Clerk auth.**
+**Clerk auth wired up (code complete, needs real Clerk credentials to run/deploy). Next: map view.**
 
 ---
 
@@ -115,8 +115,33 @@ pnpm dev
 ---
 
 ## Open Items (next things to build)
-1. **Clerk auth setup** — install `@clerk/nextjs`, wrap layout in `<ClerkProvider>`, add middleware, create webhook to sync users to `users` table
-2. **Feature development** — map view is the core customer experience, start there after auth is wired up
+1. **Configure a real Clerk app** — create the Clerk application, fill in
+   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` in `.env.local`, register
+   a webhook endpoint (`/api/webhooks/clerk`, events `user.created`/`user.updated`/
+   `user.deleted`) and put its signing secret in `CLERK_WEBHOOK_SECRET`. Local dev
+   needs a tunnel (ngrok/Clerk CLI) for Clerk to reach the webhook. **Without this,
+   `next build`/`next dev` will fail** — Clerk's provider requires a syntactically
+   valid publishable key even to render.
+2. **Feature development** — map view is the core customer experience, start there now that auth is wired up.
+3. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
+   no-op (see `/docs/features/auth.md` and `/go-live-requirements/auth.md`). Needs a
+   real decision before launch.
+4. **Operator upgrade flow** — nothing self-service exists yet to go from `customer` to
+   `operator`; every new user is `customer` by default.
+
+## Auth (this session)
+- Clerk wired up: `apps/web/middleware.ts` (route protection), `ClerkProvider` in
+  `apps/web/app/layout.tsx`, `/sign-in` and `/sign-up` pages using Clerk's prebuilt
+  components, webhook handler at `apps/web/app/api/webhooks/clerk/route.ts` +
+  `apps/web/lib/clerk-webhook.ts`, and `apps/web/lib/auth.ts#getCurrentUser()`.
+- Public (no-login) routes: `/`, `/trucks/*`, `/feed/*`, auth pages, the webhook.
+  Everything else requires a session.
+- Vitest and Playwright configs added for `apps/web` — neither existed before
+  (`apps/web/vitest.config.ts`, `apps/web/playwright.config.ts`). 9 unit tests cover
+  the webhook handler; `apps/web/e2e/auth.spec.ts` has two specs that only run once
+  real Clerk/DB env vars are present (see `/docs/features/auth.md#testing`).
+- Full details, flow diagram-in-prose, and the role model are in
+  `/docs/features/auth.md`.
 
 ---
 

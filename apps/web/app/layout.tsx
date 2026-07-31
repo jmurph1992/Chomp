@@ -1,9 +1,9 @@
 import type { Metadata } from 'next'
+import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs'
 import './globals.css'
 
 /**
  * Root layout — wraps every page in the app.
- * Clerk <ClerkProvider> will be added here once auth is wired up.
  */
 export const metadata: Metadata = {
   title: {
@@ -19,8 +19,20 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased">{children}</body>
-    </html>
+    <ClerkProvider>
+      <html lang="en">
+        <body className="antialiased">
+          <header className="flex items-center justify-end gap-4 p-4">
+            <SignedOut>
+              <SignInButton mode="modal" />
+            </SignedOut>
+            <SignedIn>
+              <UserButton />
+            </SignedIn>
+          </header>
+          {children}
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }
