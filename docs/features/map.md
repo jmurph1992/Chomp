@@ -30,16 +30,11 @@ validated (`isValidLat`/`isValidLng`) and the radius is clamped
 reachable indirectly from the public server action, so it's the trust boundary.
 All values are passed as Prisma tagged-template params, never string-concatenated.
 
-## Truck detail page
-
-`/trucks/[slug]` (`apps/web/app/trucks/[slug]/page.tsx`) shows name, cuisine,
-description, current address, and schedule for one truck. 404s
-(`notFound()`) for unknown slugs or trucks with `isActive: false`.
+Marker click-throughs land on the truck detail page — see
+[`/docs/features/truck-detail.md`](./truck-detail.md).
 
 ## Scope cuts (not built this pass)
 
-- No "open now" boolean — the schema has no per-truck timezone, so schedule
-  times are shown as plain text instead of a computed open/closed state.
 - No live polling — matches "locations update every ~30 min," data refreshes on
   page reload or the one geolocation-triggered fetch, not on an interval.
 - No city/zip search — only automatic geolocation or the default region.
@@ -48,21 +43,12 @@ description, current address, and schedule for one truck. 404s
   justify it; `stack.md` still commits to Redis for location caching, revisit
   once there's a concrete perf need.
 
-## Seed data
-
-`packages/db/prisma/seed.ts` creates ~6 fake trucks with current locations
-around Austin, TX (matching `DEFAULT_LOCATION`) so the map has something to
-show locally. Run manually with `pnpm db:seed` — never automatic, never wired
-into migrate/deploy.
-
 ## Testing
 
-- Unit tests: `apps/web/lib/geo.test.ts` (coordinate/radius validation),
-  `apps/web/lib/schedule.test.ts` (today's-schedule filtering),
-  `apps/web/lib/trucks.test.ts` (query functions, with Prisma mocked).
+- Unit: `apps/web/lib/geo.test.ts` (coordinate/radius validation),
+  `apps/web/lib/trucks.test.ts#getNearbyTrucks` (with Prisma mocked).
 - E2e (`apps/web/e2e/map.spec.ts`), gated on `DATABASE_URL` +
-  `NEXT_PUBLIC_MAPBOX_TOKEN` + seeded data: geolocation-granted marker
-  rendering, truck detail page render, 404 for unknown slug.
+  `NEXT_PUBLIC_MAPBOX_TOKEN` + seeded data: geolocation-granted marker rendering.
 
 ## Setup checklist
 

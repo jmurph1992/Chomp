@@ -85,6 +85,23 @@ describe('getTruckBySlug', () => {
           isCancelled: false,
         },
       ],
+      menuCategories: [
+        {
+          id: 'c1',
+          name: 'Tacos',
+          items: [
+            {
+              id: 'i1',
+              name: 'Al Pastor',
+              description: 'Pork, pineapple',
+              price: { toNumber: () => 4.5 },
+              imageUrl: null,
+              isFeatured: true,
+              dietaryFlags: ['spicy'],
+            },
+          ],
+        },
+      ],
     })
 
     const result = await getTruckBySlug('taco-kings')
@@ -92,5 +109,40 @@ describe('getTruckBySlug', () => {
     expect(result?.currentAddress).toBe('123 Main St')
     expect(result?.schedule).toHaveLength(1)
     expect(result?.schedule.at(0)?.locationNote).toBe('Corner of 5th')
+    expect(result?.menu).toHaveLength(1)
+    expect(result?.menu.at(0)?.items.at(0)?.price).toBe(4.5)
+  })
+
+  it('queries only available items, ordered categories by displayOrder', async () => {
+    findUnique.mockResolvedValue({
+      id: 't1',
+      slug: 'taco-kings',
+      name: 'Taco Kings',
+      description: null,
+      cuisineType: [],
+      phone: null,
+      website: null,
+      instagram: null,
+      logoUrl: null,
+      coverUrl: null,
+      locations: [],
+      schedules: [],
+      menuCategories: [],
+    })
+
+    await getTruckBySlug('taco-kings')
+
+    expect(findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          menuCategories: expect.objectContaining({
+            orderBy: { displayOrder: 'asc' },
+            include: expect.objectContaining({
+              items: expect.objectContaining({ where: { isAvailable: true } }),
+            }),
+          }),
+        }),
+      }),
+    )
   })
 })

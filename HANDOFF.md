@@ -9,7 +9,7 @@
 2026-07-31
 
 ## Current Phase
-**Clerk auth + map view wired up (both code-complete, need real Clerk/Mapbox credentials and a seeded DB to actually run/deploy).**
+**Clerk auth, map view, and truck detail page (profile + schedule + menu) wired up — all code-complete, need real Clerk/Mapbox credentials and a seeded DB to actually run/deploy.**
 
 ---
 
@@ -131,8 +131,9 @@ pnpm dev
    real decision before launch.
 5. **Operator upgrade flow** — nothing self-service exists yet to go from `customer` to
    `operator`; every new user is `customer` by default.
-6. **Feature development after this** — truck menu pages, reviews/photos, the public
-   feed, and the operator dashboard are all still unbuilt.
+6. **Feature development after this** — reviews/photos, the public feed, and the
+   operator dashboard (including menu CRUD, which was deliberately deferred — see
+   the Menu section below) are all still unbuilt.
 
 ## Auth
 - Clerk wired up: `apps/web/middleware.ts` (route protection), `ClerkProvider` in
@@ -151,31 +152,49 @@ pnpm dev
   component (`apps/web/components/truck-map.tsx`, using `mapbox-gl` directly)
   requests browser geolocation and re-fetches/re-centers via the
   `getNearbyTrucksAction` server action if granted.
-- `/trucks/[slug]` (`apps/web/app/trucks/[slug]/page.tsx`) is a minimal truck detail
-  page — name, cuisine, description, current address, schedule. 404s for unknown or
-  inactive trucks.
-- Query logic in `apps/web/lib/trucks.ts` (PostGIS `$queryRaw`, radius clamped to 50
-  miles, coordinates validated) and `apps/web/lib/schedule.ts` (today's-schedule
-  filtering — no computed "open now", schema has no per-truck timezone yet).
-- `packages/db/prisma/seed.ts` — manual-only seed script (`pnpm db:seed`), ~6 fake
-  trucks around Austin, TX matching the default region.
-- Both `/` and `/trucks/[slug]` build as fully dynamic routes (`force-dynamic` on
-  `/`) since truck data is live — verified this with a real `next build`.
+- Query logic in `apps/web/lib/trucks.ts#getNearbyTrucks` (PostGIS `$queryRaw`,
+  radius clamped to 50 miles, coordinates validated).
+- `/` builds as a fully dynamic route (`force-dynamic`) since truck data is
+  live — verified this with a real `next build`.
 - Full details and scope cuts are in `/docs/features/map.md`.
 
-## Testing infra (this session)
-- Vitest and Playwright configs added for `apps/web` — neither existed before
-  (`apps/web/vitest.config.ts`, `apps/web/playwright.config.ts`). 25 unit tests total
-  (webhook handler, geo validation, schedule filtering, truck queries).
-- `apps/web/e2e/auth.spec.ts` and `apps/web/e2e/map.spec.ts` each have specs that
-  only run once real Clerk/Mapbox/DB env vars and seed data are present — see the
-  "Testing" section of `/docs/features/auth.md` and `/docs/features/map.md`.
+## Truck detail page — profile, schedule, menu (this session)
+- `/trucks/[slug]` (`apps/web/app/trucks/[slug]/page.tsx`) shows name, cuisine,
+  description, current address, schedule, and menu for one truck. 404s for unknown
+  or inactive trucks. Fetched in one query via `apps/web/lib/trucks.ts#getTruckBySlug`.
+- Schedule: `apps/web/lib/schedule.ts` (today's-schedule filtering — no computed
+  "open now", schema has no per-truck timezone yet).
+- Menu (`apps/web/components/truck-menu.tsx` + `apps/web/lib/menu.ts`): read-only,
+  grouped by category, dietary-flag filter chips (AND logic — an item must match
+  every selected flag). Unavailable items are excluded at the query level, never
+  sent to the client. Images via `next/image` with `unoptimized` (no remote-host
+  allowlisting yet — deliberate, see `/docs/features/truck-detail.md`). No operator
+  CRUD for menu items yet — that's the first piece of an operator dashboard, not
+  built this pass; editing happens via Prisma Studio or the seed script.
+- Price formatting: `MenuItem.price` is whole-dollar `Decimal(8,2)`, not cents —
+  use `formatUsd` (`packages/utils`), not `formatPrice` (which assumes cents and
+  would silently be wrong here).
+- `packages/db/prisma/seed.ts` — manual-only seed script (`pnpm db:seed`), ~6 fake
+  trucks around Austin, TX matching the map's default region; "Taco Kings" and
+  "Pho Real" have full menus (including one unavailable item and mixed dietary
+  flags) to exercise both behaviors.
+- Full details and scope cuts are in `/docs/features/truck-detail.md`.
+
+## Testing infra (this session + last)
+- Vitest configs added for `apps/web` and `packages/utils`; Playwright config for
+  `apps/web`. 36 unit tests total (webhook handler, geo validation, schedule
+  filtering, truck queries, menu filtering, shared utils).
+- `apps/web/e2e/auth.spec.ts`, `map.spec.ts`, and `truck-detail.spec.ts` each have
+  specs that only run once real Clerk/Mapbox/DB env vars and seed data are present
+  — see the "Testing" section of the corresponding `/docs/features/*.md`.
 - `next lint` is not usable as-is — this repo has no ESLint config yet, and running
   it interactively prompts to generate one (and will silently reformat/mutate
-  `tsconfig.json` if you let it). Left alone this session; worth setting up
-  deliberately later rather than accepting the auto-generated config.
+  `tsconfig.json` if you let it). Left alone; worth setting up deliberately later
+  rather than accepting the auto-generated config.
 - `packages/db` had no `type-check` script or `@types/node` and had never actually
-  been type-checked — fixed as part of adding the seed script (which surfaced it).
+  been type-checked — fixed while adding the seed script (which surfaced it).
+- `packages/utils` had no test setup at all before this session — added
+  (`vitest.config.ts`, `test`/`type-check` scripts).
 
 ---
 

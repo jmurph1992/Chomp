@@ -55,6 +55,12 @@ export async function getTruckBySlug(slug: string): Promise<TruckDetail | null> 
     include: {
       locations: { where: { isCurrent: true }, take: 1 },
       schedules: { where: { isCancelled: false } },
+      menuCategories: {
+        orderBy: { displayOrder: 'asc' },
+        include: {
+          items: { where: { isAvailable: true }, orderBy: { createdAt: 'asc' } },
+        },
+      },
     },
   })
   if (!truck) return null
@@ -82,6 +88,19 @@ export async function getTruckBySlug(slug: string): Promise<TruckDetail | null> 
       locationNote: s.locationNote,
       address: s.address,
       isCancelled: s.isCancelled,
+    })),
+    menu: truck.menuCategories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      items: category.items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        price: item.price ? item.price.toNumber() : null,
+        imageUrl: item.imageUrl,
+        isFeatured: item.isFeatured,
+        dietaryFlags: item.dietaryFlags,
+      })),
     })),
   }
 }

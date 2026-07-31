@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getTruckBySlug } from '@/lib/trucks'
 import { getTodaysScheduleEntries } from '@/lib/schedule'
+import { TruckMenu } from '@/components/truck-menu'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -58,6 +59,8 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
           </ul>
         </section>
       )}
+
+      <TruckMenu menu={truck.menu} />
     </main>
   )
 }

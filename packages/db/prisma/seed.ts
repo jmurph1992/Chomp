@@ -9,15 +9,90 @@ import { PrismaClient } from '@prisma/client'
 
 const db = new PrismaClient()
 
-// [name, cuisine, lat, lng offset from downtown Austin]
-const TRUCKS = [
-  { name: 'Taco Kings', cuisine: ['mexican'], lat: 30.2672, lng: -97.7431 },
-  { name: 'Pho Real', cuisine: ['vietnamese'], lat: 30.271, lng: -97.7375 },
-  { name: 'Waffle Wagon', cuisine: ['breakfast', 'dessert'], lat: 30.263, lng: -97.749 },
-  { name: 'Curry Up', cuisine: ['indian'], lat: 30.2755, lng: -97.7404 },
-  { name: 'Smokehouse on Wheels', cuisine: ['bbq'], lat: 30.259, lng: -97.7355 },
-  { name: 'Slice Truck', cuisine: ['pizza'], lat: 30.2695, lng: -97.7502 },
-] as const
+type SeedMenuItem = {
+  name: string
+  description?: string
+  price?: number
+  dietaryFlags?: string[]
+  isAvailable?: boolean
+  imageUrl?: string
+}
+type SeedMenuCategory = { name: string; items: SeedMenuItem[] }
+type SeedTruck = { name: string; cuisine: string[]; lat: number; lng: number; menu: SeedMenuCategory[] }
+
+// [name, cuisine, lat, lng offset from downtown Austin, optional menu]
+const TRUCKS: SeedTruck[] = [
+  {
+    name: 'Taco Kings',
+    cuisine: ['mexican'],
+    lat: 30.2672,
+    lng: -97.7431,
+    menu: [
+      {
+        name: 'Tacos',
+        items: [
+          {
+            name: 'Al Pastor',
+            description: 'Pork, pineapple, cilantro, onion',
+            price: 4.5,
+            dietaryFlags: ['spicy'],
+            imageUrl: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=200',
+          },
+          {
+            name: 'Jackfruit Tinga',
+            description: 'Smoky jackfruit, chipotle',
+            price: 4.5,
+            dietaryFlags: ['vegan', 'gluten-free'],
+          },
+          {
+            name: 'Barbacoa (86\'d)',
+            description: 'Sold out for the day',
+            price: 5,
+            isAvailable: false,
+          },
+        ],
+      },
+      {
+        name: 'Drinks',
+        items: [
+          { name: 'Horchata', price: 3, dietaryFlags: ['vegan', 'gluten-free'] },
+          { name: 'Jarritos', price: 2.5, dietaryFlags: ['vegan', 'gluten-free'] },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'Pho Real',
+    cuisine: ['vietnamese'],
+    lat: 30.271,
+    lng: -97.7375,
+    menu: [
+      {
+        name: 'Pho',
+        items: [
+          { name: 'Beef Pho', price: 12, description: 'Rare steak, brisket' },
+          { name: 'Tofu Pho', price: 11, dietaryFlags: ['vegan'] },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'Waffle Wagon',
+    cuisine: ['breakfast', 'dessert'],
+    lat: 30.263,
+    lng: -97.749,
+    menu: [],
+  },
+  { name: 'Curry Up', cuisine: ['indian'], lat: 30.2755, lng: -97.7404, menu: [] },
+  {
+    name: 'Smokehouse on Wheels',
+    cuisine: ['bbq'],
+    lat: 30.259,
+    lng: -97.7355,
+    menu: [],
+  },
+  { name: 'Slice Truck', cuisine: ['pizza'], lat: 30.2695, lng: -97.7502, menu: [] },
+]
 
 function slugify(name: string): string {
   return name
@@ -94,6 +169,39 @@ async function main() {
         locationNote: 'Downtown Austin',
       },
     })
+
+    for (const [categoryIndex, category] of truck.menu.entries()) {
+      const categoryId = `seed_category_${slug}_${categoryIndex}`
+      await db.menuCategory.upsert({
+        where: { id: categoryId },
+        update: {},
+        create: {
+          id: categoryId,
+          truckId: createdTruck.id,
+          name: category.name,
+          displayOrder: categoryIndex,
+        },
+      })
+
+      for (const [itemIndex, item] of category.items.entries()) {
+        const itemId = `seed_item_${slug}_${categoryIndex}_${itemIndex}`
+        await db.menuItem.upsert({
+          where: { id: itemId },
+          update: {},
+          create: {
+            id: itemId,
+            categoryId,
+            truckId: createdTruck.id,
+            name: item.name,
+            description: item.description ?? null,
+            price: item.price ?? null,
+            imageUrl: item.imageUrl ?? null,
+            isAvailable: item.isAvailable ?? true,
+            dietaryFlags: item.dietaryFlags ?? [],
+          },
+        })
+      }
+    }
   }
 
   console.log(`Seeded ${TRUCKS.length} trucks.`)

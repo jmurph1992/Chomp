@@ -10,7 +10,8 @@
 | Document | Status | Description |
 |---|---|---|
 | [Auth](./features/auth.md) | Done | Clerk sign-in/sign-up, session middleware, and DB user sync |
-| [Map View](./features/map.md) | Done | Truck discovery map, nearby-trucks query, and truck detail page |
+| [Map View](./features/map.md) | Done | Truck discovery map and nearby-trucks query |
+| [Truck Detail Page](./features/truck-detail.md) | Done | Profile, schedule, and menu for a single truck |
 
 ---
 

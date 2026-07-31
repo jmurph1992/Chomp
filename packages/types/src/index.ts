@@ -52,6 +52,25 @@ export type TruckScheduleEntry = {
   isCancelled: boolean
 }
 
+/** A single menu item as shown on a truck's detail page. */
+export type MenuItemView = {
+  id: string
+  name: string
+  description: string | null
+  /** Whole-dollar amount (e.g. 12.5), not cents — use formatUsd, not formatPrice. */
+  price: number | null
+  imageUrl: string | null
+  isFeatured: boolean
+  dietaryFlags: string[]
+}
+
+/** A menu category with its (available) items. */
+export type MenuCategoryView = {
+  id: string
+  name: string
+  items: MenuItemView[]
+}
+
 /** Full shape for the truck detail page. */
 export type TruckDetail = {
   id: string
@@ -66,6 +85,7 @@ export type TruckDetail = {
   coverUrl: string | null
   currentAddress: string | null
   schedule: TruckScheduleEntry[]
+  menu: MenuCategoryView[]
 }
 
 // ─── Feed ─────────────────────────────────────────────────────────────────────
