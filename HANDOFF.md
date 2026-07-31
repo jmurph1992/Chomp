@@ -9,7 +9,7 @@
 2026-07-31
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews), and the public feed wired up — all code-complete, need real Clerk/Mapbox credentials, an applied migration, and a seeded DB to actually run/deploy.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews), the public feed, and the operator dashboard (truck creation + profile/menu/schedule/location CRUD) wired up — all code-complete, need real Clerk/Mapbox credentials, an applied migration, and a seeded DB to actually run/deploy.**
 
 ---
 
@@ -139,13 +139,14 @@ pnpm dev
 6. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
    no-op (see `/docs/features/auth.md` and `/go-live-requirements/auth.md`). Needs a
    real decision before launch.
-7. **Operator upgrade flow** — nothing self-service exists yet to go from `customer` to
-   `operator`; every new user is `customer` by default.
-8. **Review submission rate limiting + a real moderation queue** — both deliberately
+7. **Review submission rate limiting + a real moderation queue** — both deliberately
    deferred, see `/go-live-requirements/reviews.md`.
+8. **Operator dashboard go-live gaps** — no truck-creation rate limiting, no
+   manager-invite flow, no way to delete a truck/transfer ownership — see
+   `/go-live-requirements/operator-dashboard.md`.
 9. **Feature development after this** — photo upload (blocked on Cloudflare R2/
-   Images) and the operator dashboard (menu CRUD + moderation queue would both live
-   there) are the two big remaining pieces.
+   Images) is the one big remaining piece; the operator dashboard closed out the
+   other major gap (menu CRUD, truck creation).
 
 ## Auth
 - Clerk wired up: `apps/web/middleware.ts` (route protection), `ClerkProvider` in
@@ -220,17 +221,42 @@ pnpm dev
   expected, not a bug; the view already unions both sources.
 - Full details in `/docs/features/feed.md`; go-live gaps in `/go-live-requirements/feed.md`.
 
+## Operator dashboard (this session)
+- `/dashboard` (switcher / "create your truck" CTA), `/dashboard/new` (truck
+  creation), `/dashboard/[truckId]/*` (profile, menu, schedule, location), gated
+  by `apps/web/lib/operators.ts#requireOperator(truckId)` — called at both the
+  layout (page-render gate) and independently inside every server action
+  (actions are callable directly, so the layout check alone isn't enough).
+- Creating a truck (`lib/trucks.ts#createTruck`) makes the caller its owner and
+  upgrades `customer` → `operator` — the second legitimate writer of `User.role`
+  alongside the Clerk webhook; amended `/docs/features/auth.md` to say so.
+- Menu and schedule CRUD (`lib/menu.ts`, `lib/schedule.ts`) scope every
+  mutation by `truckId`, not just the record's own id — closes a cross-truck
+  IDOR gap (an operator of truck A editing truck B's menu item by guessing its
+  id). Uses `updateMany`/`deleteMany` with a 0-rows-affected check instead of a
+  plain unique `where`, since Prisma's typed update/delete only accept actual
+  unique-constraint fields.
+- Location updates (`lib/locations.ts#postLocation`) reuse the customer map's
+  browser-geolocation approach rather than geocoding a typed address —
+  coordinates are what make a truck findable on the customer map at all, so
+  they're required, not optional.
+- Full details, the manager-parity/no-invite-flow nuance, and scope cuts are in
+  `/docs/features/operator-dashboard.md`; go-live gaps in
+  `/go-live-requirements/operator-dashboard.md`.
+
 ## Testing infra (this session + earlier)
 - Vitest configs added for `apps/web` and `packages/utils`; Playwright config for
-  `apps/web`. 67 unit tests total (webhook handler, geo validation, schedule
-  filtering, truck queries, menu filtering, reviews queries + actions, feed
+  `apps/web`. 122 unit tests total (webhook handler, geo validation, schedule
+  filtering, truck/menu/schedule/location CRUD, operator authorization
+  (including the cross-truck IDOR case), reviews queries + actions, feed
   pagination + refresh, shared utils).
-- `apps/web/e2e/auth.spec.ts`, `map.spec.ts`, `truck-detail.spec.ts`, and
-  `feed.spec.ts` each have specs that only run once real Clerk/Mapbox/DB env vars
-  and seed data are present — see the "Testing" section of the corresponding
-  `/docs/features/*.md`. Actually submitting a review as a signed-in user isn't
-  e2e-tested yet — needs real Clerk test credentials (`@clerk/testing`), same
-  prerequisite as the auth spec's sign-in widget test.
+- `apps/web/e2e/auth.spec.ts`, `map.spec.ts`, `truck-detail.spec.ts`,
+  `feed.spec.ts`, and `dashboard.spec.ts` each have specs that only run once
+  real Clerk/Mapbox/DB env vars and seed data are present — see the "Testing"
+  section of the corresponding `/docs/features/*.md`. Actually creating a truck
+  or submitting a review as a signed-in user isn't e2e-tested yet — needs real
+  Clerk test credentials (`@clerk/testing`), same prerequisite as the auth
+  spec's sign-in widget test.
 - `next lint` is not usable as-is — this repo has no ESLint config yet, and running
   it interactively prompts to generate one (and will silently reformat/mutate
   `tsconfig.json` if you let it). Left alone; worth setting up deliberately later

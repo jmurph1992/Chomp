@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs'
 import './globals.css'
 
@@ -27,6 +28,9 @@ export default function RootLayout({
               <SignInButton mode="modal" />
             </SignedOut>
             <SignedIn>
+              <Link href="/dashboard" className="text-sm underline">
+                Dashboard
+              </Link>
               <UserButton />
             </SignedIn>
           </header>

@@ -14,6 +14,7 @@
 | [Truck Detail Page](./features/truck-detail.md) | Done | Profile, schedule, and menu for a single truck |
 | [Reviews](./features/reviews.md) | Done | Rating + text reviews, edit/delete own, minimal admin hide |
 | [Public Feed](./features/feed.md) | Done | Recent high-rated reviews/photos, materialized view + refresh route |
+| [Operator Dashboard](./features/operator-dashboard.md) | Done | Truck creation, profile/menu/schedule/location CRUD, truck switcher |
 
 ---
 

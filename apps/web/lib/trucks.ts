@@ -1,6 +1,35 @@
-import { db } from '@chomp/db'
-import type { TruckDetail, TruckMapMarker } from '@chomp/types'
+import { db, type User } from '@chomp/db'
+import { slugify } from '@chomp/utils'
+import type {
+  CreateTruckInput,
+  TruckDetail,
+  TruckMapMarker,
+  TruckProfileEdit,
+  TruckProfileInput,
+} from '@chomp/types'
 import { clampRadiusMeters, isValidLat, isValidLng } from './geo'
+
+const MAX_SLUG_ATTEMPTS = 20
+export const MAX_TRUCK_NAME_LENGTH = 100
+export const MAX_TRUCK_DESCRIPTION_LENGTH = 2000
+export const MAX_CUISINE_TYPES = 10
+const MAX_CUISINE_TYPE_LENGTH = 30
+
+export function isValidTruckName(name: string): boolean {
+  return typeof name === 'string' && name.trim().length > 0 && name.length <= MAX_TRUCK_NAME_LENGTH
+}
+
+export function isValidTruckDescription(description: string | null): boolean {
+  if (description === null) return true
+  return description.length <= MAX_TRUCK_DESCRIPTION_LENGTH
+}
+
+export function isValidCuisineType(cuisineType: string[]): boolean {
+  return (
+    cuisineType.length <= MAX_CUISINE_TYPES &&
+    cuisineType.every((c) => typeof c === 'string' && c.length > 0 && c.length <= MAX_CUISINE_TYPE_LENGTH)
+  )
+}
 
 type NearbyTruckRow = {
   id: string
@@ -99,8 +128,102 @@ export async function getTruckBySlug(slug: string): Promise<TruckDetail | null> 
         price: item.price ? item.price.toNumber() : null,
         imageUrl: item.imageUrl,
         isFeatured: item.isFeatured,
+        isAvailable: item.isAvailable,
         dietaryFlags: item.dietaryFlags,
       })),
     })),
   }
+}
+
+async function generateUniqueSlug(name: string): Promise<string> {
+  const base = slugify(name)
+  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+    const candidate = attempt === 0 ? base : `${base}-${attempt + 1}`
+    const existing = await db.truck.findUnique({ where: { slug: candidate } })
+    if (!existing) return candidate
+  }
+  throw new Error(`Could not generate a unique slug for "${name}"`)
+}
+
+/**
+ * Creates a truck, makes `user` its owner, and upgrades a plain customer to
+ * operator. The second (besides the Clerk webhook) legitimate writer of
+ * User.role — see docs/features/auth.md. Never downgrades an existing
+ * operator/admin.
+ */
+export async function createTruck(
+  user: Pick<User, 'id' | 'role'>,
+  input: CreateTruckInput,
+): Promise<{ id: string; slug: string }> {
+  if (!isValidTruckName(input.name)) throw new Error('Invalid truck name')
+  if (!isValidTruckDescription(input.description)) throw new Error('Description too long')
+  if (!isValidCuisineType(input.cuisineType)) throw new Error('Invalid cuisine type list')
+
+  const slug = await generateUniqueSlug(input.name)
+
+  const truck = await db.$transaction(async (tx) => {
+    const created = await tx.truck.create({
+      data: {
+        ownerId: user.id,
+        name: input.name,
+        slug,
+        description: input.description,
+        cuisineType: input.cuisineType,
+      },
+    })
+    await tx.truckOperator.create({
+      data: { truckId: created.id, userId: user.id, role: 'owner' },
+    })
+    if (user.role === 'customer') {
+      await tx.user.update({ where: { id: user.id }, data: { role: 'operator' } })
+    }
+    return created
+  })
+
+  return { id: truck.id, slug: truck.slug }
+}
+
+/** Truck profile for the dashboard edit form — unlike getTruckBySlug, not filtered by isActive. */
+export async function getTruckForEdit(truckId: string): Promise<TruckProfileEdit | null> {
+  const truck = await db.truck.findUnique({ where: { id: truckId } })
+  if (!truck) return null
+
+  return {
+    id: truck.id,
+    slug: truck.slug,
+    name: truck.name,
+    description: truck.description,
+    cuisineType: truck.cuisineType,
+    phone: truck.phone,
+    website: truck.website,
+    instagram: truck.instagram,
+    logoUrl: truck.logoUrl,
+    coverUrl: truck.coverUrl,
+    isActive: truck.isActive,
+  }
+}
+
+/**
+ * Updates only the fields in TruckProfileInput — isVerified, ownerId, and slug
+ * are never accepted here, not just omitted from the form.
+ */
+export async function updateTruckProfile(truckId: string, input: TruckProfileInput): Promise<void> {
+  if (!isValidTruckName(input.name)) throw new Error('Invalid truck name')
+  if (!isValidTruckDescription(input.description)) throw new Error('Description too long')
+  if (!isValidCuisineType(input.cuisineType)) throw new Error('Invalid cuisine type list')
+
+  await db.truck.update({
+    where: { id: truckId },
+    data: {
+      name: input.name,
+      description: input.description,
+      cuisineType: input.cuisineType,
+      phone: input.phone,
+      website: input.website,
+      instagram: input.instagram,
+      logoUrl: input.logoUrl,
+      coverUrl: input.coverUrl,
+      isActive: input.isActive,
+    },
+  })
 }

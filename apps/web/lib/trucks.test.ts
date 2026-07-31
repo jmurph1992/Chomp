@@ -2,15 +2,37 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const queryRaw = vi.fn()
 const findUnique = vi.fn()
+const truckUpdate = vi.fn()
+const txTruckCreate = vi.fn()
+const txTruckOperatorCreate = vi.fn()
+const txUserUpdate = vi.fn()
+
+const tx = {
+  truck: { create: txTruckCreate },
+  truckOperator: { create: txTruckOperatorCreate },
+  user: { update: txUserUpdate },
+}
+const transaction = vi.fn((callback: (txArg: typeof tx) => unknown) => callback(tx))
 
 vi.mock('@chomp/db', () => ({
   db: {
     $queryRaw: queryRaw,
-    truck: { findUnique },
+    $transaction: transaction,
+    truck: { findUnique, update: truckUpdate },
   },
 }))
 
-const { getNearbyTrucks, getTruckBySlug } = await import('./trucks')
+const {
+  getNearbyTrucks,
+  getTruckBySlug,
+  createTruck,
+  getTruckForEdit,
+  updateTruckProfile,
+  isValidTruckName,
+  isValidTruckDescription,
+  isValidCuisineType,
+  MAX_TRUCK_NAME_LENGTH,
+} = await import('./trucks')
 
 describe('getNearbyTrucks', () => {
   beforeEach(() => {
@@ -97,6 +119,7 @@ describe('getTruckBySlug', () => {
               price: { toNumber: () => 4.5 },
               imageUrl: null,
               isFeatured: true,
+              isAvailable: true,
               dietaryFlags: ['spicy'],
             },
           ],
@@ -144,5 +167,137 @@ describe('getTruckBySlug', () => {
         }),
       }),
     )
+  })
+})
+
+describe('validation helpers', () => {
+  it('isValidTruckName rejects empty/whitespace-only and over-length names', () => {
+    expect(isValidTruckName('Taco Kings')).toBe(true)
+    expect(isValidTruckName('')).toBe(false)
+    expect(isValidTruckName('   ')).toBe(false)
+    expect(isValidTruckName('a'.repeat(MAX_TRUCK_NAME_LENGTH + 1))).toBe(false)
+  })
+
+  it('isValidTruckDescription accepts null and rejects over-length text', () => {
+    expect(isValidTruckDescription(null)).toBe(true)
+    expect(isValidTruckDescription('a'.repeat(2001))).toBe(false)
+  })
+
+  it('isValidCuisineType caps list length and each entry length', () => {
+    expect(isValidCuisineType(['mexican', 'fusion'])).toBe(true)
+    expect(isValidCuisineType(Array(11).fill('x'))).toBe(false)
+    expect(isValidCuisineType(['a'.repeat(31)])).toBe(false)
+  })
+})
+
+describe('createTruck', () => {
+  beforeEach(() => {
+    findUnique.mockReset()
+    transaction.mockClear()
+    txTruckCreate.mockReset()
+    txTruckOperatorCreate.mockReset()
+    txUserUpdate.mockReset()
+  })
+
+  it('rejects an invalid name without starting a transaction', async () => {
+    await expect(
+      createTruck({ id: 'u1', role: 'customer' }, { name: '', description: null, cuisineType: [] }),
+    ).rejects.toThrow('Invalid truck name')
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  it('creates the truck, makes the caller its owner, and upgrades a customer to operator', async () => {
+    findUnique.mockResolvedValue(null) // slug is free
+    txTruckCreate.mockResolvedValue({ id: 't1', slug: 'taco-kings' })
+
+    const result = await createTruck(
+      { id: 'u1', role: 'customer' },
+      { name: 'Taco Kings', description: null, cuisineType: ['mexican'] },
+    )
+
+    expect(result).toEqual({ id: 't1', slug: 'taco-kings' })
+    expect(txTruckCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ ownerId: 'u1', slug: 'taco-kings' }) }),
+    )
+    expect(txTruckOperatorCreate).toHaveBeenCalledWith({
+      data: { truckId: 't1', userId: 'u1', role: 'owner' },
+    })
+    expect(txUserUpdate).toHaveBeenCalledWith({ where: { id: 'u1' }, data: { role: 'operator' } })
+  })
+
+  it('does not touch role for a user who is already an operator', async () => {
+    findUnique.mockResolvedValue(null)
+    txTruckCreate.mockResolvedValue({ id: 't1', slug: 'taco-kings' })
+
+    await createTruck(
+      { id: 'u1', role: 'operator' },
+      { name: 'Taco Kings', description: null, cuisineType: [] },
+    )
+
+    expect(txUserUpdate).not.toHaveBeenCalled()
+  })
+
+  it('appends a numeric suffix when the base slug is already taken', async () => {
+    findUnique.mockResolvedValueOnce({ id: 'existing' }).mockResolvedValueOnce(null)
+    txTruckCreate.mockResolvedValue({ id: 't1', slug: 'taco-kings-2' })
+
+    await createTruck(
+      { id: 'u1', role: 'customer' },
+      { name: 'Taco Kings', description: null, cuisineType: [] },
+    )
+
+    expect(txTruckCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ slug: 'taco-kings-2' }) }),
+    )
+  })
+})
+
+describe('getTruckForEdit', () => {
+  beforeEach(() => findUnique.mockReset())
+
+  it('is not filtered by isActive, unlike getTruckBySlug', async () => {
+    findUnique.mockResolvedValue(null)
+    await getTruckForEdit('t1')
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { id: 't1' } })
+  })
+
+  it('returns null when the truck does not exist', async () => {
+    findUnique.mockResolvedValue(null)
+    expect(await getTruckForEdit('t1')).toBeNull()
+  })
+})
+
+describe('updateTruckProfile', () => {
+  beforeEach(() => truckUpdate.mockReset())
+
+  const validInput = {
+    name: 'Taco Kings',
+    description: null,
+    cuisineType: ['mexican'],
+    phone: null,
+    website: null,
+    instagram: null,
+    logoUrl: null,
+    coverUrl: null,
+    isActive: true,
+  }
+
+  it('rejects an invalid name without touching the database', async () => {
+    await expect(updateTruckProfile('t1', { ...validInput, name: '' })).rejects.toThrow(
+      'Invalid truck name',
+    )
+    expect(truckUpdate).not.toHaveBeenCalled()
+  })
+
+  it('updates only the writable fields — never isVerified, ownerId, or slug', async () => {
+    truckUpdate.mockResolvedValue({})
+    await updateTruckProfile('t1', validInput)
+
+    const call = truckUpdate.mock.calls.at(0)?.at(0)
+    expect(call.where).toEqual({ id: 't1' })
+    expect(call.data).not.toHaveProperty('isVerified')
+    expect(call.data).not.toHaveProperty('ownerId')
+    expect(call.data).not.toHaveProperty('slug')
   })
 })

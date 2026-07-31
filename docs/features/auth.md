@@ -26,11 +26,18 @@ out: `/`, `/trucks/*`, `/feed/*`, the auth pages themselves, and the webhook end
 
 ## Roles
 
-Every new user starts as `customer`. There is no self-service way to become an
-`operator` yet — that will be a separate "register your truck" flow that upgrades the
-role server-side. The webhook handler is the only code path allowed to set `role`;
-it always writes `customer` on creation, so a role can never be set from a client-
-controlled value.
+Every new user starts as `customer`. There are exactly two places `User.role` is
+ever written server-side — never from a client-supplied value:
+
+1. The Clerk webhook handler (`apps/web/lib/clerk-webhook.ts`), which always writes
+   `customer` on `user.created` and never changes `role` on `user.updated`.
+2. `apps/web/lib/trucks.ts#createTruck`, called from the operator dashboard's
+   "create your truck" flow (`docs/features/operator-dashboard.md`) — creating a
+   truck makes the caller its owner and upgrades a `customer` to `operator`. It
+   never downgrades an existing `operator` or `admin`.
+
+`admin` is not self-service anywhere — it's set out-of-band (Prisma Studio/direct
+DB access), same as `isVerified` on trucks.
 
 ## Known gap: account deletion
 

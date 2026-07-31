@@ -61,6 +61,7 @@ export type MenuItemView = {
   price: number | null
   imageUrl: string | null
   isFeatured: boolean
+  isAvailable: boolean
   dietaryFlags: string[]
 }
 
@@ -86,6 +87,80 @@ export type TruckDetail = {
   currentAddress: string | null
   schedule: TruckScheduleEntry[]
   menu: MenuCategoryView[]
+}
+
+// ─── Operator dashboard ─────────────────────────────────────────────────────
+
+/** A truck the signed-in user operates, for the dashboard's truck switcher. */
+export type OperatedTruck = {
+  id: string
+  slug: string
+  name: string
+  role: 'owner' | 'manager'
+}
+
+/** Input for creating a new truck (fields the operator supplies). */
+export type CreateTruckInput = {
+  name: string
+  description: string | null
+  cuisineType: string[]
+}
+
+/**
+ * Writable truck profile fields. Deliberately excludes isVerified (admin-only,
+ * set outside this feature), ownerId, and slug (immutable after creation) —
+ * never accept these as input to an update, not just hide them in a form.
+ */
+export type TruckProfileInput = {
+  name: string
+  description: string | null
+  cuisineType: string[]
+  phone: string | null
+  website: string | null
+  instagram: string | null
+  logoUrl: string | null
+  coverUrl: string | null
+  isActive: boolean
+}
+
+/** Full profile as shown in the dashboard edit form. */
+export type TruckProfileEdit = TruckProfileInput & {
+  id: string
+  slug: string
+}
+
+/** Input for creating/updating a menu category. */
+export type MenuCategoryInput = {
+  name: string
+}
+
+/** Input for creating/updating a menu item. */
+export type MenuItemInput = {
+  name: string
+  description: string | null
+  price: number | null
+  imageUrl: string | null
+  isAvailable: boolean
+  isFeatured: boolean
+  dietaryFlags: string[]
+}
+
+/** Input for creating/updating a schedule entry. */
+export type ScheduleEntryInput = {
+  dayOfWeek: number | null
+  specificDate: string | null
+  startTime: string | null
+  endTime: string | null
+  locationNote: string | null
+  address: string | null
+  isCancelled: boolean
+}
+
+/** Input for posting a truck's current location. */
+export type PostLocationInput = {
+  lat: number
+  lng: number
+  address: string | null
 }
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
