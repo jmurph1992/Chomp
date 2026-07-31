@@ -9,7 +9,7 @@
 2026-07-31
 
 ## Current Phase
-**Clerk auth, map view, and truck detail page (profile + schedule + menu + reviews) wired up — all code-complete, need real Clerk/Mapbox credentials and a seeded DB to actually run/deploy.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews), and the public feed wired up — all code-complete, need real Clerk/Mapbox credentials, an applied migration, and a seeded DB to actually run/deploy.**
 
 ---
 
@@ -123,27 +123,37 @@ pnpm dev
    `next build`/`next dev` will fail** — Clerk's provider requires a syntactically
    valid publishable key even to render.
 2. **Get a Mapbox token** — set `NEXT_PUBLIC_MAPBOX_TOKEN` in `.env.local`.
-3. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against a real dev
-   database to get sample trucks; the map has nothing to show without it. I have not
-   run this myself — no DB was connected in this session.
-4. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
+3. **Apply the new migration** — `20260731120000_add_feed_items_unique_index`
+   (`pnpm db:migrate` from `packages/db`) is written but **not applied to any
+   database** — I have no DB connection in this sandbox, so I could not run it
+   myself, and per the "never run migrations without asking" rule I wouldn't
+   have run it against your Neon DB without confirming first regardless.
+   `REFRESH MATERIALIZED VIEW CONCURRENTLY` (used by the feed refresh route)
+   will error until this is applied.
+4. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against a real dev
+   database to get sample trucks, menu items, reviews, and a refreshed feed; nothing
+   has data without it. I have not run this myself — no DB was connected in this
+   session.
+5. **Set `CRON_SECRET`** and point a scheduler at `POST /api/cron/refresh-feed`
+   once deployed — nothing calls it automatically yet (see `/go-live-requirements/feed.md`).
+6. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
    no-op (see `/docs/features/auth.md` and `/go-live-requirements/auth.md`). Needs a
    real decision before launch.
-5. **Operator upgrade flow** — nothing self-service exists yet to go from `customer` to
+7. **Operator upgrade flow** — nothing self-service exists yet to go from `customer` to
    `operator`; every new user is `customer` by default.
-6. **Review submission rate limiting + a real moderation queue** — both deliberately
-   deferred this session, see `/go-live-requirements/reviews.md`.
-7. **Feature development after this** — photo upload (blocked on Cloudflare R2/
-   Images), the public feed, and the operator dashboard (menu CRUD + moderation
-   queue would both live there) are all still unbuilt.
+8. **Review submission rate limiting + a real moderation queue** — both deliberately
+   deferred, see `/go-live-requirements/reviews.md`.
+9. **Feature development after this** — photo upload (blocked on Cloudflare R2/
+   Images) and the operator dashboard (menu CRUD + moderation queue would both live
+   there) are the two big remaining pieces.
 
 ## Auth
 - Clerk wired up: `apps/web/middleware.ts` (route protection), `ClerkProvider` in
   `apps/web/app/layout.tsx`, `/sign-in` and `/sign-up` pages using Clerk's prebuilt
   components, webhook handler at `apps/web/app/api/webhooks/clerk/route.ts` +
   `apps/web/lib/clerk-webhook.ts`, and `apps/web/lib/auth.ts#getCurrentUser()`.
-- Public (no-login) routes: `/`, `/trucks/*`, `/feed/*`, auth pages, the webhook.
-  Everything else requires a session.
+- Public (no-login) routes: `/`, `/trucks/*`, `/feed/*`, `/api/cron/*`, auth pages,
+  the webhook. Everything else requires a session.
 - Full details, flow diagram-in-prose, and the role model are in
   `/docs/features/auth.md`.
 
@@ -188,21 +198,39 @@ pnpm dev
 - `packages/db/prisma/seed.ts` — manual-only seed script (`pnpm db:seed`), ~6 fake
   trucks around Austin, TX matching the map's default region; "Taco Kings" and
   "Pho Real" have full menus (including one unavailable item and mixed dietary
-  flags) and reviews (including one hidden review on Taco Kings) to exercise all
-  of the above.
+  flags) and reviews (including two hidden reviews on Taco Kings — one low-rated,
+  one high-rated, to test the hide filter independently of the rating filter) to
+  exercise all of the above. Ends with a plain (non-`CONCURRENTLY`) feed refresh.
 - Full details and scope cuts are in `/docs/features/truck-detail.md` (profile/
   schedule/menu) and `/docs/features/reviews.md` (reviews).
 
+## Public feed (this session)
+- `/feed` (`apps/web/app/feed/page.tsx`) reads the `feed_items` materialized view
+  (already existed) via `apps/web/lib/feed.ts#getFeedPage`, joined to trucks/users
+  for the link and attribution. Page-based pagination (`?page=N`), no client-side
+  fetching.
+- **New migration** `20260731120000_add_feed_items_unique_index` adds a unique
+  index required for `REFRESH MATERIALIZED VIEW CONCURRENTLY` — written but **not
+  applied to any database yet**, see Open Items above.
+- `POST /api/cron/refresh-feed` runs the concurrent refresh, gated by `CRON_SECRET`
+  (added to the middleware's public allowlist — it authenticates itself via the
+  bearer token, not a Clerk session, same rationale as the webhook route). Nothing
+  calls this automatically yet.
+- The photo half of the feed will render nothing until photo upload/likes exist —
+  expected, not a bug; the view already unions both sources.
+- Full details in `/docs/features/feed.md`; go-live gaps in `/go-live-requirements/feed.md`.
+
 ## Testing infra (this session + earlier)
 - Vitest configs added for `apps/web` and `packages/utils`; Playwright config for
-  `apps/web`. 57 unit tests total (webhook handler, geo validation, schedule
-  filtering, truck queries, menu filtering, reviews queries + actions, shared utils).
-- `apps/web/e2e/auth.spec.ts`, `map.spec.ts`, and `truck-detail.spec.ts` each have
-  specs that only run once real Clerk/Mapbox/DB env vars and seed data are present
-  — see the "Testing" section of the corresponding `/docs/features/*.md`. Actually
-  submitting a review as a signed-in user isn't e2e-tested yet — needs real Clerk
-  test credentials (`@clerk/testing`), same prerequisite as the auth spec's sign-in
-  widget test.
+  `apps/web`. 67 unit tests total (webhook handler, geo validation, schedule
+  filtering, truck queries, menu filtering, reviews queries + actions, feed
+  pagination + refresh, shared utils).
+- `apps/web/e2e/auth.spec.ts`, `map.spec.ts`, `truck-detail.spec.ts`, and
+  `feed.spec.ts` each have specs that only run once real Clerk/Mapbox/DB env vars
+  and seed data are present — see the "Testing" section of the corresponding
+  `/docs/features/*.md`. Actually submitting a review as a signed-in user isn't
+  e2e-tested yet — needs real Clerk test credentials (`@clerk/testing`), same
+  prerequisite as the auth spec's sign-in widget test.
 - `next lint` is not usable as-is — this repo has no ESLint config yet, and running
   it interactively prompts to generate one (and will silently reformat/mutate
   `tsconfig.json` if you let it). Left alone; worth setting up deliberately later
@@ -214,12 +242,13 @@ pnpm dev
 
 ---
 
-## Migrations Applied (all on Neon dev DB)
-| Migration | What it does |
-|---|---|
-| `20260506222654_init` | Enables PostGIS, creates all tables, enums, indexes, and foreign keys |
-| `20260506222917_add_gist_index` | Partial GiST index on `truck_locations.geom WHERE is_current = true` |
-| `20260506223040_add_feed_view` | `feed_items` materialized view + index for the public feed |
+## Migrations
+| Migration | What it does | Applied to Neon dev DB? |
+|---|---|---|
+| `20260506222654_init` | Enables PostGIS, creates all tables, enums, indexes, and foreign keys | Yes (as of an earlier session) |
+| `20260506222917_add_gist_index` | Partial GiST index on `truck_locations.geom WHERE is_current = true` | Yes |
+| `20260506223040_add_feed_view` | `feed_items` materialized view + index for the public feed | Yes |
+| `20260731120000_add_feed_items_unique_index` | Unique index on `feed_items.item_id`, required for `REFRESH MATERIALIZED VIEW CONCURRENTLY` | **No — run `pnpm db:migrate` before using the feed refresh route** |
 
 ---
 
@@ -239,7 +268,7 @@ pnpm dev
 - `.env.local` is gitignored — never committed. Each developer creates their own from `.env.example`.
 - The Prisma client is generated into `node_modules` — run `pnpm db:generate` after any schema changes.
 - PostGIS `geography(Point, 4326)` columns use `Unsupported()` in Prisma — all geospatial queries (`ST_DWithin`, `ST_Distance`) must use `prisma.$queryRaw`.
-- The `feed_items` materialized view must be refreshed by an Inngest background job (not yet built) — never compute inline.
+- The `feed_items` materialized view is refreshed via `POST /api/cron/refresh-feed` (manual/cron-triggered, `CRON_SECRET`-gated) — no automatic scheduling yet, real Inngest-based refresh is still a follow-up. Never compute the feed inline from the base tables.
 - `CREATE EXTENSION IF NOT EXISTS postgis;` is included at the top of the `init` migration — any fresh DB will get PostGIS automatically.
 - Node 24.15.0 is required. Managed via asdf (`.tool-versions` in home dir) and nvm (`.nvmrc` in project root).
 - When running `prisma migrate` from Claude Code, Prisma requires explicit user consent via `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` env var for destructive operations (`reset`, `drop`).

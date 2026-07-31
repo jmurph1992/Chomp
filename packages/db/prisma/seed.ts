@@ -29,7 +29,7 @@ type SeedTruck = {
 }
 
 // Fake customers who leave reviews — distinct from truck owners.
-const REVIEWERS = ['alice', 'bilal']
+const REVIEWERS = ['alice', 'bilal', 'carlos']
 
 // [name, cuisine, lat, lng offset from downtown Austin, optional menu]
 const TRUCKS: SeedTruck[] = [
@@ -74,6 +74,9 @@ const TRUCKS: SeedTruck[] = [
     reviews: [
       { reviewer: 'alice', rating: 5, body: 'Best tacos in Austin, hands down.' },
       { reviewer: 'bilal', rating: 2, body: 'Rude at the window', isVisible: false },
+      // High-rated but hidden — proves isVisible is filtered independently of
+      // rating (a rating: 2 hidden review would be excluded by rating alone).
+      { reviewer: 'carlos', rating: 5, body: 'Hidden for testing purposes', isVisible: false },
     ],
   },
   {
@@ -268,7 +271,12 @@ async function main() {
     }
   }
 
-  console.log(`Seeded ${TRUCKS.length} trucks.`)
+  // Plain (non-concurrent) refresh — works whether or not the unique-index
+  // migration for CONCURRENTLY refresh has been applied yet, and nothing else
+  // is reading feed_items concurrently during a seed run anyway.
+  await db.$executeRaw`REFRESH MATERIALIZED VIEW feed_items`
+
+  console.log(`Seeded ${TRUCKS.length} trucks and refreshed the feed.`)
 }
 
 main()

@@ -121,4 +121,7 @@ export type FeedItem = {
   content: string | null
   imageUrl: string | null
   createdAt: string
+  truckSlug: string
+  truckName: string
+  authorDisplayName: string | null
 }
