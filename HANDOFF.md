@@ -9,7 +9,7 @@
 2026-07-31
 
 ## Current Phase
-**Clerk auth wired up (code complete, needs real Clerk credentials to run/deploy). Next: map view.**
+**Clerk auth + map view wired up (both code-complete, need real Clerk/Mapbox credentials and a seeded DB to actually run/deploy).**
 
 ---
 
@@ -122,26 +122,60 @@ pnpm dev
    needs a tunnel (ngrok/Clerk CLI) for Clerk to reach the webhook. **Without this,
    `next build`/`next dev` will fail** — Clerk's provider requires a syntactically
    valid publishable key even to render.
-2. **Feature development** — map view is the core customer experience, start there now that auth is wired up.
-3. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
+2. **Get a Mapbox token** — set `NEXT_PUBLIC_MAPBOX_TOKEN` in `.env.local`.
+3. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against a real dev
+   database to get sample trucks; the map has nothing to show without it. I have not
+   run this myself — no DB was connected in this session.
+4. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
    no-op (see `/docs/features/auth.md` and `/go-live-requirements/auth.md`). Needs a
    real decision before launch.
-4. **Operator upgrade flow** — nothing self-service exists yet to go from `customer` to
+5. **Operator upgrade flow** — nothing self-service exists yet to go from `customer` to
    `operator`; every new user is `customer` by default.
+6. **Feature development after this** — truck menu pages, reviews/photos, the public
+   feed, and the operator dashboard are all still unbuilt.
 
-## Auth (this session)
+## Auth
 - Clerk wired up: `apps/web/middleware.ts` (route protection), `ClerkProvider` in
   `apps/web/app/layout.tsx`, `/sign-in` and `/sign-up` pages using Clerk's prebuilt
   components, webhook handler at `apps/web/app/api/webhooks/clerk/route.ts` +
   `apps/web/lib/clerk-webhook.ts`, and `apps/web/lib/auth.ts#getCurrentUser()`.
 - Public (no-login) routes: `/`, `/trucks/*`, `/feed/*`, auth pages, the webhook.
   Everything else requires a session.
-- Vitest and Playwright configs added for `apps/web` — neither existed before
-  (`apps/web/vitest.config.ts`, `apps/web/playwright.config.ts`). 9 unit tests cover
-  the webhook handler; `apps/web/e2e/auth.spec.ts` has two specs that only run once
-  real Clerk/DB env vars are present (see `/docs/features/auth.md#testing`).
 - Full details, flow diagram-in-prose, and the role model are in
   `/docs/features/auth.md`.
+
+## Map view (this session)
+- Root page (`/`) is the truck discovery map. Two-stage fetch: RSC renders trucks
+  around a default fallback region (`DEFAULT_LOCATION` in `apps/web/lib/geo.ts`,
+  currently an Austin, TX placeholder) immediately, then the client `TruckMap`
+  component (`apps/web/components/truck-map.tsx`, using `mapbox-gl` directly)
+  requests browser geolocation and re-fetches/re-centers via the
+  `getNearbyTrucksAction` server action if granted.
+- `/trucks/[slug]` (`apps/web/app/trucks/[slug]/page.tsx`) is a minimal truck detail
+  page — name, cuisine, description, current address, schedule. 404s for unknown or
+  inactive trucks.
+- Query logic in `apps/web/lib/trucks.ts` (PostGIS `$queryRaw`, radius clamped to 50
+  miles, coordinates validated) and `apps/web/lib/schedule.ts` (today's-schedule
+  filtering — no computed "open now", schema has no per-truck timezone yet).
+- `packages/db/prisma/seed.ts` — manual-only seed script (`pnpm db:seed`), ~6 fake
+  trucks around Austin, TX matching the default region.
+- Both `/` and `/trucks/[slug]` build as fully dynamic routes (`force-dynamic` on
+  `/`) since truck data is live — verified this with a real `next build`.
+- Full details and scope cuts are in `/docs/features/map.md`.
+
+## Testing infra (this session)
+- Vitest and Playwright configs added for `apps/web` — neither existed before
+  (`apps/web/vitest.config.ts`, `apps/web/playwright.config.ts`). 25 unit tests total
+  (webhook handler, geo validation, schedule filtering, truck queries).
+- `apps/web/e2e/auth.spec.ts` and `apps/web/e2e/map.spec.ts` each have specs that
+  only run once real Clerk/Mapbox/DB env vars and seed data are present — see the
+  "Testing" section of `/docs/features/auth.md` and `/docs/features/map.md`.
+- `next lint` is not usable as-is — this repo has no ESLint config yet, and running
+  it interactively prompts to generate one (and will silently reformat/mutate
+  `tsconfig.json` if you let it). Left alone this session; worth setting up
+  deliberately later rather than accepting the auto-generated config.
+- `packages/db` had no `type-check` script or `@types/node` and had never actually
+  been type-checked — fixed as part of adding the seed script (which surfaced it).
 
 ---
 

@@ -26,6 +26,48 @@ export type Coordinates = {
   lng: number
 }
 
+// ─── Trucks ───────────────────────────────────────────────────────────────────
+
+/** Minimal truck shape for rendering a map marker. */
+export type TruckMapMarker = {
+  id: string
+  slug: string
+  name: string
+  cuisineType: string[]
+  logoUrl: string | null
+  lat: number
+  lng: number
+  distanceMeters: number
+}
+
+/** A single schedule entry as shown on a truck's detail page. */
+export type TruckScheduleEntry = {
+  id: string
+  dayOfWeek: number | null
+  specificDate: string | null
+  startTime: string | null
+  endTime: string | null
+  locationNote: string | null
+  address: string | null
+  isCancelled: boolean
+}
+
+/** Full shape for the truck detail page. */
+export type TruckDetail = {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  cuisineType: string[]
+  phone: string | null
+  website: string | null
+  instagram: string | null
+  logoUrl: string | null
+  coverUrl: string | null
+  currentAddress: string | null
+  schedule: TruckScheduleEntry[]
+}
+
 // ─── Feed ─────────────────────────────────────────────────────────────────────
 
 export type FeedItemType = 'review' | 'photo'
