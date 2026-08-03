@@ -9,7 +9,13 @@
 ## Features
 | Document | Status | Description |
 |---|---|---|
-| *(none yet)* | — | Features will be documented here as they are built |
+| [Auth](./features/auth.md) | Done | Clerk sign-in/sign-up, session middleware, and DB user sync |
+| [Map View](./features/map.md) | Done | Truck discovery map and nearby-trucks query |
+| [Truck Detail Page](./features/truck-detail.md) | Done | Profile, schedule, and menu for a single truck |
+| [Reviews](./features/reviews.md) | Done | Rating + text reviews, edit/delete own, minimal admin hide |
+| [Public Feed](./features/feed.md) | Done | Recent high-rated reviews/photos, materialized view + refresh route |
+| [Operator Dashboard](./features/operator-dashboard.md) | Done | Truck creation, profile/menu/schedule/location CRUD, truck switcher |
+| [Photo Upload](./features/photo-upload.md) | Done | R2 + Cloudflare Images hybrid upload, powers review/menu/logo photos |
 
 ---
 

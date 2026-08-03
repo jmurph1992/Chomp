@@ -213,7 +213,18 @@ CREATE MATERIALIZED VIEW feed_items AS
   ORDER BY created_at DESC;
 
 CREATE INDEX ON feed_items (truck_id, created_at DESC);
+
+-- Required for REFRESH MATERIALIZED VIEW CONCURRENTLY (used by the feed's
+-- refresh route so refreshes don't lock out concurrent reads). Added in
+-- migration 20260731120000_add_feed_items_unique_index.
+CREATE UNIQUE INDEX feed_items_item_id_key ON feed_items (item_id);
 ```
+
+Refreshing is currently manual: `POST /api/cron/refresh-feed` (gated by
+`CRON_SECRET`) runs the `CONCURRENTLY` refresh; nothing calls it automatically
+yet — a scheduler (Vercel Cron, or eventually Inngest per the "Refreshed by a
+background job" note above) needs to be pointed at it. See
+`/docs/features/feed.md`.
 
 ---
 

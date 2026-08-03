@@ -32,6 +32,18 @@ export function formatPrice(cents: number): string {
 }
 
 /**
+ * Formats a dollar amount (not cents) as a USD currency string.
+ * e.g. 12.5 → "$12.50". Menu item prices are stored as whole dollars
+ * (Decimal(8,2)), unlike formatPrice's cents — don't mix these up.
+ */
+export function formatUsd(amount: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount)
+}
+
+/**
  * Returns a human-readable relative time string.
  * e.g. "2 hours ago", "3 days ago"
  */

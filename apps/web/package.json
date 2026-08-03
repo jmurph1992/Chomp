@@ -13,9 +13,14 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3",
+    "@aws-sdk/s3-presigned-post": "^3",
+    "@aws-sdk/s3-request-presigner": "^3",
     "@chomp/db": "workspace:*",
     "@chomp/types": "workspace:*",
     "@chomp/utils": "workspace:*",
+    "@clerk/nextjs": "^6",
+    "mapbox-gl": "^3",
     "next": "^15",
     "react": "^19",
     "react-dom": "^19",
@@ -26,11 +31,13 @@
     "node": ">=24.15.0"
   },
   "devDependencies": {
+    "@clerk/testing": "^1",
     "@playwright/test": "^1",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4",
+    "standardwebhooks": "^1",
     "tailwindcss": "^4",
     "@tailwindcss/postcss": "^4",
     "typescript": "^5",

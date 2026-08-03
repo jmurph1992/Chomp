@@ -9,7 +9,12 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:seed": "prisma db seed",
+    "type-check": "tsc --noEmit"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "engines": {
     "node": ">=24.15.0"
@@ -18,7 +23,9 @@
     "@prisma/client": "^6"
   },
   "devDependencies": {
+    "@types/node": "^24",
     "prisma": "^6",
+    "tsx": "^4",
     "typescript": "^5"
   }
 }

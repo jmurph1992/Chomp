@@ -18,7 +18,7 @@ export const db =
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 
 // Re-export Prisma types so consumers don't need to import @prisma/client directly
-export type { Prisma } from '@prisma/client'
+export type { Prisma, User } from '@prisma/client'
 export {
   UserRole,
   OperatorRole,
