@@ -9,7 +9,7 @@
 2026-08-03
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Still need real Clerk/Mapbox/Cloudflare credentials and a seeded DB to actually run/deploy.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Real Clerk, Mapbox, and Cloudflare (R2 + Images) credentials are now in `apps/web/.env.local` and verified working end-to-end. Still need: the Cloudflare R2 API token narrowed to just the `chomp-uploads` bucket (currently has account-wide R2 access, including two unrelated buckets from another project — see Open Items), and a seeded DB to actually run/deploy.**
 
 ---
 
@@ -131,40 +131,55 @@ pnpm dev
 ---
 
 ## Open Items (next things to build)
-1. **Configure a real Clerk app** — create the Clerk application, fill in
-   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` in `apps/web/.env.local`,
-   register a webhook endpoint (`/api/webhooks/clerk`, events `user.created`/
-   `user.updated`/`user.deleted`) and put its signing secret in
-   `CLERK_WEBHOOK_SECRET`. Local dev needs a tunnel (ngrok/Clerk CLI) for Clerk to
-   reach the webhook. **Without this, `next build`/`next dev` will fail** — Clerk's
-   provider requires a syntactically valid publishable key even to render.
-2. **Get a Mapbox token** — set `NEXT_PUBLIC_MAPBOX_TOKEN` in `apps/web/.env.local`.
+1. ~~Configure a real Clerk app~~ — **done in a prior session**; publishable/secret
+   keys are live in `apps/web/.env.local` and verified working (see "This session"
+   below). Webhook endpoint/signing secret still worth double-checking against the
+   real Clerk dashboard config before launch.
+2. ~~Get a Mapbox token~~ — **done**; `NEXT_PUBLIC_MAPBOX_TOKEN` is live and verified
+   against the real Geocoding API.
 3. ~~Apply two migrations~~ — **done this session**, see Migrations table below.
    Both are now applied to the Neon dev DB (`prisma migrate deploy`, confirmed with
    `prisma migrate status` — no drift).
-4. **Set up Cloudflare R2 + Images** — create an R2 bucket (`CLOUDFLARE_R2_*` env
-   vars) with a lifecycle rule auto-expiring objects older than ~24h (nothing
-   in the app cleans up an upload that's never finalized), and a Cloudflare
-   Images API token (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_HASH`).
-   See `/docs/features/photo-upload.md`.
-5. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against the real
+4. ~~Set up Cloudflare R2 + Images~~ — **done**; bucket (`chomp-uploads`) exists,
+   `CLOUDFLARE_R2_*` and `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_IMAGES_ACCOUNT_HASH` are
+   live and verified working (S3-signed request to R2, Cloudflare Images API call).
+   Still not done: the lifecycle rule auto-expiring un-finalized uploads (~24h) —
+   nothing in the app cleans those up. See `/docs/features/photo-upload.md`.
+5. **Narrow the Cloudflare R2 API token's scope to `chomp-uploads` only** — the
+   `CLOUDFLARE_API_TOKEN` in `apps/web/.env.local` currently has account-wide R2
+   access. Listing buckets with it returns `chomp-uploads` plus two buckets from an
+   apparently unrelated project on the same Cloudflare account
+   (`hivemind-releases`, `hivemind-uploads`) — a leak of this token exposes those
+   too. Separately, the R2 dashboard (**R2 → Manage R2 API Tokens**) shows two
+   token entries both named "Chomp uploads" — one **Account API token**, one
+   **User API token** — and that UI doesn't surface the Access Key ID anywhere to
+   determine which one actually backs the live `CLOUDFLARE_R2_ACCESS_KEY_ID` in
+   `.env.local`. Agreed approach (not yet executed): generate a fresh
+   **Account**-type R2 API token scoped to *"Apply to specific buckets only" →
+   `chomp-uploads`*, swap its new Access Key ID/Secret into `.env.local`, verify
+   the app still works, then delete **both** existing ambiguous "Chomp uploads"
+   token entries. Once that dedicated R2 token exists, also strip the R2
+   permission group off `CLOUDFLARE_API_TOKEN` itself, leaving it Images-only
+   (least privilege — it's a general REST API token, doesn't need R2 access at
+   all once a dedicated one exists).
+6. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against the real
    Neon dev database (now reachable — `packages/db/.env` has live credentials) to
    get sample trucks, menu items, reviews, a seeded review photo with likes, and a
    refreshed feed; nothing has data without it yet.
-6. **Set `CRON_SECRET`** and point a scheduler at `POST /api/cron/refresh-feed`
+7. **Set `CRON_SECRET`** and point a scheduler at `POST /api/cron/refresh-feed`
    once deployed — nothing calls it automatically yet (see `/go-live-requirements/feed.md`).
-7. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
+8. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
    no-op (see `/docs/features/auth.md` and `/go-live-requirements/auth.md`). Needs a
    real decision before launch.
-8. **Review submission rate limiting + a real moderation queue** — both deliberately
+9. **Review submission rate limiting + a real moderation queue** — both deliberately
    deferred, see `/go-live-requirements/reviews.md`.
-9. **Operator dashboard go-live gaps** — no truck-creation rate limiting, no
-   manager-invite flow, no way to delete a truck/transfer ownership — see
-   `/go-live-requirements/operator-dashboard.md`.
-10. **Photo upload go-live gaps** — R2 lifecycle rule not actually configured yet
+10. **Operator dashboard go-live gaps** — no truck-creation rate limiting, no
+    manager-invite flow, no way to delete a truck/transfer ownership — see
+    `/go-live-requirements/operator-dashboard.md`.
+11. **Photo upload go-live gaps** — R2 lifecycle rule not actually configured yet
     (just documented), no rate limiting on upload-slot requests — see
     `/go-live-requirements/photo-upload.md`.
-11. **Feature development after this** — every major feature in the original
+12. **Feature development after this** — every major feature in the original
     product scope now has at least a first pass built. What's left is mostly
     the go-live gaps above, plus anything net-new the user wants to add.
 
@@ -193,6 +208,31 @@ pnpm dev
   (`.gitignore:15`, the `.env.local` pattern matches at any depth).
   **Still need to fill in real values** for Clerk/Mapbox/Cloudflare in that
   file before the app will run (see Open Items 1, 2, 4 above).
+- **Verified all real credentials the user filled into `apps/web/.env.local`**
+  (Clerk, Mapbox, Cloudflare) actually work, by hitting the real provider APIs
+  directly rather than just checking the values look plausible:
+  - Mapbox: live Geocoding API request with `NEXT_PUBLIC_MAPBOX_TOKEN` → 200.
+  - Clerk: `CLERK_SECRET_KEY` against `GET /v1/users` on Clerk's API → 200;
+    `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` decodes to the same Clerk instance
+    (`safe-cricket-47.clerk.accounts.dev`).
+  - Cloudflare R2: `CLOUDFLARE_R2_ACCESS_KEY_ID`/`SECRET` signed a real
+    SigV4 request (HEAD + ListObjectsV2) against `chomp-uploads` on the R2
+    S3-compatible endpoint → 200 (bucket exists, empty). No `boto3`/AWS CLI
+    available in this environment, so the SigV4 signing was done by hand in a
+    throwaway Python script (stdlib `hmac`/`hashlib` only), deleted after use.
+  - Cloudflare general API token (`CLOUDFLARE_API_TOKEN`): first check showed
+    the token itself was "active" but had **zero account access** (empty
+    result from `GET /accounts`) — user had created it without assigning any
+    permission groups. User fixed this in the dashboard; re-verified after
+    and it now successfully lists R2 buckets and queries the Images API.
+  - **In the process of re-verifying, found the token has account-wide R2
+    access** — `GET /accounts/{id}/r2/buckets` returns `chomp-uploads` plus
+    two buckets from an apparently unrelated project (`hivemind-releases`,
+    `hivemind-uploads`) on the same Cloudflare account. Logged as Open Item 5
+    above — not fixed yet, needs the user to act in the Cloudflare dashboard
+    (token permission edits are the kind of access-control change to leave to
+    the account owner, not something to push via API on their behalf even
+    where technically possible).
 
 ## Auth
 - Clerk wired up: `apps/web/middleware.ts` (route protection), `ClerkProvider` in
