@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import type { TruckProfileEdit } from '@chomp/types'
 import { updateTruckProfileAction } from '@/app/actions/trucks'
 import { MAX_TRUCK_DESCRIPTION_LENGTH, MAX_TRUCK_NAME_LENGTH } from '@/lib/trucks'
+import { ImageUploadField } from '@/components/image-upload-field'
 
 export function TruckProfileForm({ truck }: { truck: TruckProfileEdit }) {
   const [name, setName] = useState(truck.name)
@@ -102,22 +103,8 @@ export function TruckProfileForm({ truck }: { truck: TruckProfileEdit }) {
           className="mt-1 w-full rounded border p-2 text-sm"
         />
       </div>
-      <div>
-        <label className="block text-sm font-medium">Logo URL</label>
-        <input
-          value={logoUrl}
-          onChange={(e) => setLogoUrl(e.target.value)}
-          className="mt-1 w-full rounded border p-2 text-sm"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium">Cover image URL</label>
-        <input
-          value={coverUrl}
-          onChange={(e) => setCoverUrl(e.target.value)}
-          className="mt-1 w-full rounded border p-2 text-sm"
-        />
-      </div>
+      <ImageUploadField label="Logo" value={logoUrl || null} onChange={setLogoUrl} />
+      <ImageUploadField label="Cover image" value={coverUrl || null} onChange={setCoverUrl} />
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
         Listed publicly

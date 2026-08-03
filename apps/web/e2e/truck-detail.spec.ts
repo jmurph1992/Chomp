@@ -65,4 +65,15 @@ test.describe('truck reviews', () => {
     await expect(page.getByText('to write a review')).toBeVisible()
     await expect(page.getByPlaceholder('Optional — tell others what you thought')).toHaveCount(0)
   })
+
+  test('renders a review photo and its like count, but no interactive like button when signed out', async ({
+    page,
+  }) => {
+    await page.goto(`/trucks/${SEEDED_SLUG}`)
+
+    // Seeded on Alice's review with 2 likes.
+    await expect(page.getByText('So good')).toBeVisible()
+    await expect(page.getByText('♡ 2')).toBeVisible()
+    await expect(page.getByRole('button', { name: /♡|♥/ })).toHaveCount(0)
+  })
 })

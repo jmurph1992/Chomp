@@ -10,6 +10,7 @@ import {
   deleteMenuItemAction,
   updateMenuItemAction,
 } from '@/app/actions/menu'
+import { ImageUploadField } from '@/components/image-upload-field'
 
 type Props = { truckId: string; slug: string; menu: MenuCategoryView[] }
 
@@ -252,12 +253,7 @@ function MenuItemForm({
         inputMode="decimal"
         className="w-full rounded border p-1 text-sm"
       />
-      <input
-        value={imageUrl}
-        onChange={(e) => setImageUrl(e.target.value)}
-        placeholder="Image URL"
-        className="w-full rounded border p-1 text-sm"
-      />
+      <ImageUploadField label="Photo" value={imageUrl || null} onChange={setImageUrl} />
       <input
         value={dietaryFlags}
         onChange={(e) => setDietaryFlags(e.target.value)}

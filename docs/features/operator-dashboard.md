@@ -83,8 +83,9 @@ Component can't do) if the user operates more than one truck.
 - **No manager-invite flow.** Manager permission parity works once a row
   exists; nothing creates that row through the product.
 - **No drag-to-reorder** for menu categories — new ones append to the end.
-- **No image upload** for logo/cover/menu-item photos — pasted URLs only,
-  same as the read-only menu pass. Blocked on Cloudflare R2/Images.
+- ~~No image upload~~ **Resolved**: logo/cover and menu item photos now use
+  the real upload flow (`ImageUploadField`, `/docs/features/photo-upload.md`)
+  instead of paste-a-URL.
 - **No rate limiting** on truck creation — tracked in
   `/go-live-requirements/operator-dashboard.md`.
 - **Slug is immutable** after creation — avoids broken links/SEO churn and a

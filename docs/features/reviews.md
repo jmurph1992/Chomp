@@ -39,11 +39,16 @@ enforced by the existing `@@unique([truckId, userId])` on `Review`.
 - Review bodies render as plain JSX text — no `dangerouslySetInnerHTML`, no
   markdown/rich text in v1.
 
+## Photos
+
+A review can carry one photo (upload, attach/replace, like/unlike) — see
+`/docs/features/photo-upload.md` for the full flow. `deleteReview` cleans up
+any attached photo (and its likes) first, since `review_photos.review_id` is
+`ON DELETE RESTRICT` — deleting a review with a photo still attached would
+otherwise fail on the FK constraint.
+
 ## Scope cuts (not built this pass)
 
-- **No photo upload.** Reviews are text + rating only. `ReviewPhoto`/`PhotoLike`
-  exist in the schema but nothing writes to them yet — blocked on Cloudflare
-  R2/Images being wired up as its own piece of work.
 - **Moderation is one-way from this page.** An admin can hide a review (it
   then disappears from the visible list, per `getVisibleReviewsForTruck`'s
   filter), but there's no unhide UI here — once hidden, restoring it requires
@@ -58,18 +63,25 @@ enforced by the existing `@@unique([truckId, userId])` on `Review`.
 ## Testing
 
 - Unit: `apps/web/lib/reviews.test.ts` (all query/mutation functions, Prisma
-  mocked; validation helpers; the `canModerateReviews` permission check) and
+  mocked; validation helpers; the `canModerateReviews` permission check;
+  photo mapping including the viewer's like state) and
   `apps/web/app/actions/reviews.test.ts` (auth/ownership/admin rejection paths,
   mirroring the webhook route's test pattern).
 - E2e (`apps/web/e2e/truck-detail.spec.ts`, gated on `DATABASE_URL` + seed
   data): visible reviews and average rating render, a hidden seeded review
-  never renders, and a signed-out visitor sees the sign-in prompt instead of
-  the form. Actually submitting a review as a signed-in user isn't covered
-  yet — would need real Clerk test credentials (`@clerk/testing`), same
-  prerequisite as the auth e2e spec's sign-in widget test.
+  never renders, a signed-out visitor sees the sign-in prompt instead of
+  the form, and a seeded review's photo + like count render (with no
+  interactive like button while signed out). Actually submitting a review or
+  photo as a signed-in user isn't covered yet — would need real Clerk test
+  credentials (`@clerk/testing`), same prerequisite as the auth e2e spec's
+  sign-in widget test.
 
 ## Seed data
 
-`packages/db/prisma/seed.ts` adds two fake "customer" reviewers (distinct from
-truck owners) and a few reviews on Taco Kings and Pho Real, including one
-`isVisible: false` row on Taco Kings to exercise the hide filter end to end.
+`packages/db/prisma/seed.ts` adds three fake "customer" reviewers (distinct
+from truck owners) and a few reviews on Taco Kings and Pho Real, including one
+`isVisible: false` row and one high-rated-but-hidden row on Taco Kings to
+exercise the hide filter end to end. Alice's Taco Kings review also gets a
+seeded photo with 2 likes — enough to clear the feed's `likes_count >= 2`
+threshold, so the feed's photo side (previously always empty, since nothing
+could create a `ReviewPhoto` row before this pass) has real data to render.

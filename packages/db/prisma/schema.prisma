@@ -205,6 +205,7 @@ model ReviewPhoto {
   truckId    String   @map("truck_id")
   url        String
   caption    String?
+  isVisible  Boolean  @default(true) @map("is_visible")
   likesCount Int      @default(0) @map("likes_count")
   createdAt  DateTime @default(now()) @map("created_at")
 

@@ -7,8 +7,11 @@ with `isActive: false`. Fetched in one query via
 
 ## Profile & schedule
 
-Name, cuisine, description, current address (from the current
-`truck_locations` row), today's schedule, and the full weekly schedule.
+Name, cuisine, description, logo/cover image, current address (from the
+current `truck_locations` row), today's schedule, and the full weekly
+schedule. Logo and cover render via `next/image` with `unoptimized` (see
+Images below) — added this pass; they existed as fields since the operator
+dashboard but were never actually rendered on the public page until now.
 
 **Scope cut**: no computed "open now" boolean — the schema has no per-truck
 timezone, so schedule times are shown as plain text
@@ -27,11 +30,12 @@ client and can't be un-hidden by inspecting the response.
   not cents. Converted with `.toNumber()` and formatted with
   `formatUsd` (`packages/utils`). Don't reuse `formatPrice` here — it assumes
   integer cents and would silently divide by 100.
-- **Images**: rendered via `next/image` with `unoptimized`, not through Next's
-  image optimizer. The optimizer fetches remote URLs server-side, so
-  allowlisting arbitrary hosts in `next.config.ts` before Cloudflare
-  Images defines the real pipeline would be a needless SSRF-flavored surface.
-  Revisit once uploads go through Cloudflare Images.
+- **Images**: rendered via `next/image` with `unoptimized`. Originally chosen
+  to avoid allowlisting arbitrary hosts in `next.config.ts` before an upload
+  pipeline existed; now that images (menu item photos, logo/cover — see
+  `/docs/features/photo-upload.md`) come from `imagedelivery.net` (Cloudflare
+  Images, already resizes via variants), `unoptimized` stays for a different
+  reason — Next re-optimizing an already-resized image would be redundant.
 - **Dietary filter chips**: `apps/web/lib/menu.ts` has the actual filtering
   logic (`getUniqueDietaryFlags`, `filterMenuByDietaryFlags`), kept out of the
   component so it's unit-testable without a component-testing setup. Selecting
@@ -40,14 +44,14 @@ client and can't be un-hidden by inspecting the response.
   required), not just any one of them. Categories with no matching items are
   dropped from the filtered view entirely.
 
-## Scope cuts (not built this pass)
+## Scope cuts
 
-- No operator CRUD for menu items — creating/editing happens via Prisma
-  Studio or the seed script for now. There's no operator dashboard yet for
-  any truck data (profile, schedule, menu), so this isn't singled out.
 - No "sold out" state — unavailable items are hidden, not shown with a badge.
-- No image upload flow — blocked on Cloudflare R2/Images.
-- No reviews or photos yet — separate future feature.
+
+Operator CRUD for menu items/profile (`/docs/features/operator-dashboard.md`),
+reviews (`/docs/features/reviews.md`), and photo upload
+(`/docs/features/photo-upload.md`) were all originally deferred from this
+page's first pass — all three now exist as their own features.
 
 ## Testing
 

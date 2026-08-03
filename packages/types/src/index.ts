@@ -163,6 +163,24 @@ export type PostLocationInput = {
   address: string | null
 }
 
+// ─── Photo upload ─────────────────────────────────────────────────────────────
+
+/** Presigned R2 POST — client uploads the file directly to `url` with `fields`. */
+export type UploadSlot = {
+  url: string
+  fields: Record<string, string>
+  key: string
+}
+
+/** A photo attached to a review. */
+export type ReviewPhotoView = {
+  id: string
+  url: string
+  caption: string | null
+  likesCount: number
+  isLikedByViewer: boolean
+}
+
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
 /** A single review as shown on a truck's detail page. */
@@ -176,6 +194,7 @@ export type ReviewView = {
   body: string | null
   isVisible: boolean
   createdAt: string
+  photo: ReviewPhotoView | null
 }
 
 export type ReviewSummary = {

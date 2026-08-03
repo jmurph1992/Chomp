@@ -25,4 +25,13 @@ test.describe('public feed', () => {
     // is_visible filter is doing real work here, not just the rating filter.
     await expect(page.getByText('Hidden for testing purposes')).toHaveCount(0)
   })
+
+  test('also renders qualifying photos — previously always empty before photo upload existed', async ({
+    page,
+  }) => {
+    await page.goto('/feed')
+
+    // Seeded with 2 likes (the >= 2 threshold) on Alice's Taco Kings review.
+    await expect(page.getByText('So good')).toBeVisible()
+  })
 })

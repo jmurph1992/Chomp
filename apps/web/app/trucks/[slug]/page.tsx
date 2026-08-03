@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import { getTruckBySlug } from '@/lib/trucks'
 import { getTodaysScheduleEntries } from '@/lib/schedule'
@@ -27,14 +28,36 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
 
   const currentUser = await getCurrentUser()
   const [reviews, reviewSummary, ownReview] = await Promise.all([
-    getVisibleReviewsForTruck(truck.id),
+    getVisibleReviewsForTruck(truck.id, currentUser?.id),
     getReviewSummary(truck.id),
     currentUser ? getOwnReview(truck.id, currentUser.id) : Promise.resolve(null),
   ])
 
   return (
     <main className="mx-auto max-w-2xl p-8">
-      <h1 className="text-3xl font-bold">{truck.name}</h1>
+      {truck.coverUrl && (
+        <Image
+          src={truck.coverUrl}
+          alt=""
+          width={800}
+          height={300}
+          unoptimized
+          className="mb-4 h-48 w-full rounded object-cover"
+        />
+      )}
+      <div className="flex items-center gap-3">
+        {truck.logoUrl && (
+          <Image
+            src={truck.logoUrl}
+            alt=""
+            width={56}
+            height={56}
+            unoptimized
+            className="h-14 w-14 rounded-full object-cover"
+          />
+        )}
+        <h1 className="text-3xl font-bold">{truck.name}</h1>
+      </div>
       {truck.cuisineType.length > 0 && (
         <p className="mt-1 text-gray-500">{truck.cuisineType.join(', ')}</p>
       )}

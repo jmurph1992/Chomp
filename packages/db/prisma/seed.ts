@@ -18,7 +18,14 @@ type SeedMenuItem = {
   imageUrl?: string
 }
 type SeedMenuCategory = { name: string; items: SeedMenuItem[] }
-type SeedReview = { reviewer: string; rating: number; body?: string; isVisible?: boolean }
+type SeedReviewPhoto = { url: string; caption?: string; likedBy?: string[] }
+type SeedReview = {
+  reviewer: string
+  rating: number
+  body?: string
+  isVisible?: boolean
+  photo?: SeedReviewPhoto
+}
 type SeedTruck = {
   name: string
   cuisine: string[]
@@ -72,7 +79,19 @@ const TRUCKS: SeedTruck[] = [
       },
     ],
     reviews: [
-      { reviewer: 'alice', rating: 5, body: 'Best tacos in Austin, hands down.' },
+      {
+        reviewer: 'alice',
+        rating: 5,
+        body: 'Best tacos in Austin, hands down.',
+        // >= 2 likes and rating 5 — qualifies for both the review and photo
+        // sides of the feed, since it was otherwise always empty (no photo
+        // upload flow existed before this pass).
+        photo: {
+          url: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?w=400',
+          caption: 'So good',
+          likedBy: ['bilal', 'carlos'],
+        },
+      },
       { reviewer: 'bilal', rating: 2, body: 'Rude at the window', isVisible: false },
       // High-rated but hidden — proves isVisible is filtered independently of
       // rating (a rating: 2 hidden review would be excluded by rating alone).
@@ -257,7 +276,7 @@ async function main() {
       const reviewer = reviewers.get(review.reviewer)
       if (!reviewer) throw new Error(`Unknown seed reviewer: ${review.reviewer}`)
 
-      await db.review.upsert({
+      const createdReview = await db.review.upsert({
         where: { truckId_userId: { truckId: createdTruck.id, userId: reviewer.id } },
         update: {},
         create: {
@@ -268,6 +287,34 @@ async function main() {
           isVisible: review.isVisible ?? true,
         },
       })
+
+      if (review.photo) {
+        const photoId = `seed_photo_${slug}_${review.reviewer}`
+        await db.reviewPhoto.upsert({
+          where: { id: photoId },
+          update: {},
+          create: {
+            id: photoId,
+            reviewId: createdReview.id,
+            userId: reviewer.id,
+            truckId: createdTruck.id,
+            url: review.photo.url,
+            caption: review.photo.caption ?? null,
+            isVisible: true,
+            likesCount: review.photo.likedBy?.length ?? 0,
+          },
+        })
+
+        for (const likerName of review.photo.likedBy ?? []) {
+          const liker = reviewers.get(likerName)
+          if (!liker) throw new Error(`Unknown seed reviewer: ${likerName}`)
+          await db.photoLike.upsert({
+            where: { photoId_userId: { photoId, userId: liker.id } },
+            update: {},
+            create: { photoId, userId: liker.id },
+          })
+        }
+      }
     }
   }
 
