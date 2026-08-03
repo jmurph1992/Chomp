@@ -11,6 +11,3 @@
   creation and review submission (see the other `go-live-requirements` files).
   Here it's slightly more expensive than those: each successful ingest is a
   billed Cloudflare Images resource, not just a DB write.
-- **Apply the `20260803120000_add_review_photo_visibility` migration**
-  before relying on photo moderation or the feed's photo side respecting
-  `is_visible` — see `/docs/features/photo-upload.md`.

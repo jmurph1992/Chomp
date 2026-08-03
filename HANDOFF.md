@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-07-31
+2026-08-03
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete, need real Clerk/Mapbox/Cloudflare credentials, two applied migrations, and a seeded DB to actually run/deploy.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Still need real Clerk/Mapbox/Cloudflare credentials and a seeded DB to actually run/deploy.**
 
 ---
 
@@ -53,7 +53,7 @@ Chomp/
 ├── packages/
 │   ├── db/                   # Prisma schema, migrations, db client singleton
 │   │   └── prisma/
-│   │       └── migrations/   # ✅ All three migrations applied to Neon
+│   │       └── migrations/   # ✅ All five migrations applied to Neon
 ├── packages/
 │   ├── types/                # Shared TypeScript types
 │   └── utils/                # Shared utility functions
@@ -88,14 +88,28 @@ pnpm install
 
 ### 2. Set up environment variables
 ```bash
-cp .env.example .env.local
+cp .env.example apps/web/.env.local
 ```
-Fill in `.env.local` with:
+**Must go in `apps/web/.env.local`, not the repo root** — Next.js only reads
+`.env*` files from its own project directory (wherever `next.config.ts`
+lives), so a root-level `.env.local` is silently ignored by `next dev`/
+`next build`. Learned this the hard way in the 2026-08-03 session; see "This
+session" notes below.
+
+Fill in `apps/web/.env.local` with at least:
 - `DATABASE_URL` — Neon pooled connection string
 - `DIRECT_URL` — Neon direct connection string (required for Prisma migrations)
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` — required even to
+  render; see Open Items below
+- `NEXT_PUBLIC_MAPBOX_TOKEN` — required for the map view
 
-Both are available in the Neon dashboard under **Connect → Connection string**.
-Toggle "Pooled connection" on/off to get each one.
+Both Neon URLs are available in the Neon dashboard under **Connect →
+Connection string**. Toggle "Pooled connection" on/off to get each one.
+
+Separately, `packages/db/.env` needs its own `DATABASE_URL` / `DIRECT_URL` —
+that's what the Prisma CLI reads when you run migration commands directly
+from `packages/db` (see step 3). It's a different file from
+`apps/web/.env.local`; both need the same two values.
 
 ### 3. Apply migrations (already run — Neon DB is live)
 Migrations are committed and the Neon database is already in sync.
@@ -106,8 +120,8 @@ pnpm db:migrate
 ```
 Prisma will detect the existing migrations and apply them in order. No manual SQL needed.
 
-> **Note:** The Neon DB already has all three migrations applied. Only run this
-> if you're setting up a brand new database.
+> **Note:** The Neon DB already has all five migrations applied (confirmed
+> 2026-08-03). Only run this if you're setting up a brand new database.
 
 ### 4. Start the dev server
 ```bash
@@ -118,31 +132,25 @@ pnpm dev
 
 ## Open Items (next things to build)
 1. **Configure a real Clerk app** — create the Clerk application, fill in
-   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` in `.env.local`, register
-   a webhook endpoint (`/api/webhooks/clerk`, events `user.created`/`user.updated`/
-   `user.deleted`) and put its signing secret in `CLERK_WEBHOOK_SECRET`. Local dev
-   needs a tunnel (ngrok/Clerk CLI) for Clerk to reach the webhook. **Without this,
-   `next build`/`next dev` will fail** — Clerk's provider requires a syntactically
-   valid publishable key even to render.
-2. **Get a Mapbox token** — set `NEXT_PUBLIC_MAPBOX_TOKEN` in `.env.local`.
-3. **Apply two migrations** — neither is applied to any database; I have no DB
-   connection in this sandbox, and per the "never run migrations without asking"
-   rule wouldn't have run them against your Neon DB without confirming first
-   regardless:
-   - `20260731120000_add_feed_items_unique_index` — `REFRESH MATERIALIZED VIEW
-     CONCURRENTLY` (used by the feed refresh route) errors without it.
-   - `20260803120000_add_review_photo_visibility` — adds `ReviewPhoto.isVisible`
-     and rebuilds `feed_items` to filter photos by it too. Photo moderation and
-     the feed's photo-visibility filtering don't work without this.
+   `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` in `apps/web/.env.local`,
+   register a webhook endpoint (`/api/webhooks/clerk`, events `user.created`/
+   `user.updated`/`user.deleted`) and put its signing secret in
+   `CLERK_WEBHOOK_SECRET`. Local dev needs a tunnel (ngrok/Clerk CLI) for Clerk to
+   reach the webhook. **Without this, `next build`/`next dev` will fail** — Clerk's
+   provider requires a syntactically valid publishable key even to render.
+2. **Get a Mapbox token** — set `NEXT_PUBLIC_MAPBOX_TOKEN` in `apps/web/.env.local`.
+3. ~~Apply two migrations~~ — **done this session**, see Migrations table below.
+   Both are now applied to the Neon dev DB (`prisma migrate deploy`, confirmed with
+   `prisma migrate status` — no drift).
 4. **Set up Cloudflare R2 + Images** — create an R2 bucket (`CLOUDFLARE_R2_*` env
    vars) with a lifecycle rule auto-expiring objects older than ~24h (nothing
    in the app cleans up an upload that's never finalized), and a Cloudflare
    Images API token (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_IMAGES_ACCOUNT_HASH`).
    See `/docs/features/photo-upload.md`.
-5. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against a real dev
-   database to get sample trucks, menu items, reviews, a seeded review photo with
-   likes, and a refreshed feed; nothing has data without it. I have not run this
-   myself — no DB was connected in this session.
+5. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against the real
+   Neon dev database (now reachable — `packages/db/.env` has live credentials) to
+   get sample trucks, menu items, reviews, a seeded review photo with likes, and a
+   refreshed feed; nothing has data without it yet.
 6. **Set `CRON_SECRET`** and point a scheduler at `POST /api/cron/refresh-feed`
    once deployed — nothing calls it automatically yet (see `/go-live-requirements/feed.md`).
 7. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
@@ -159,6 +167,32 @@ pnpm dev
 11. **Feature development after this** — every major feature in the original
     product scope now has at least a first pass built. What's left is mostly
     the go-live gaps above, plus anything net-new the user wants to add.
+
+## This session (2026-08-03)
+- Pulled 9 commits from `origin/main` (Clerk auth, map, truck detail, feed,
+  operator dashboard, photo upload, and their tests — all landed in a prior
+  session and were just fast-forwarded in locally).
+- **Applied both pending migrations** to the live Neon dev DB using
+  `packages/db/.env` (real credentials, provided by the user this session):
+  `20260731120000_add_feed_items_unique_index` and
+  `20260803120000_add_review_photo_visibility`. Ran `prisma migrate deploy`,
+  confirmed with `prisma migrate status` → "Database schema is up to date!",
+  no drift, no failed/edited migrations. (One transient `P1001` on the very
+  first attempt, almost certainly Neon compute waking from autosuspend —
+  resolved on retry, confirmed network/TLS/psql all worked fine in between.)
+- Removed `packages/db/.env.example` (commit `b90a070`) now that
+  `packages/db/.env` holds real credentials — an example file isn't needed
+  alongside a working one, and it wasn't gitignored so keeping it around
+  risked drift.
+- **Moved `.env.local` from the repo root to `apps/web/.env.local`.** Next.js
+  only reads `.env*` files from its own project directory (wherever
+  `next.config.ts` lives) — a root-level `.env.local` is silently ignored by
+  `next dev`/`next build` run via `turbo dev` from `apps/web`. The file's
+  contents (all keys from `.env.example`, mostly still blank) were otherwise
+  unchanged. Confirmed it's still gitignored at the new path
+  (`.gitignore:15`, the `.env.local` pattern matches at any depth).
+  **Still need to fill in real values** for Clerk/Mapbox/Cloudflare in that
+  file before the app will run (see Open Items 1, 2, 4 above).
 
 ## Auth
 - Clerk wired up: `apps/web/middleware.ts` (route protection), `ClerkProvider` in
@@ -336,8 +370,8 @@ pnpm dev
 | `20260506222654_init` | Enables PostGIS, creates all tables, enums, indexes, and foreign keys | Yes (as of an earlier session) |
 | `20260506222917_add_gist_index` | Partial GiST index on `truck_locations.geom WHERE is_current = true` | Yes |
 | `20260506223040_add_feed_view` | `feed_items` materialized view + index for the public feed | Yes |
-| `20260731120000_add_feed_items_unique_index` | Unique index on `feed_items.item_id`, required for `REFRESH MATERIALIZED VIEW CONCURRENTLY` | **No — run `pnpm db:migrate` before using the feed refresh route** |
-| `20260803120000_add_review_photo_visibility` | Adds `review_photos.is_visible`; rebuilds `feed_items` to filter the photo side by it too | **No — photo moderation and feed photo-visibility won't work without it** |
+| `20260731120000_add_feed_items_unique_index` | Unique index on `feed_items.item_id`, required for `REFRESH MATERIALIZED VIEW CONCURRENTLY` | Yes (applied 2026-08-03) |
+| `20260803120000_add_review_photo_visibility` | Adds `review_photos.is_visible`; rebuilds `feed_items` to filter the photo side by it too | Yes (applied 2026-08-03) |
 
 ---
 
@@ -354,7 +388,10 @@ pnpm dev
 ---
 
 ## Notes
-- `.env.local` is gitignored — never committed. Each developer creates their own from `.env.example`.
+- `apps/web/.env.local` (app runtime) and `packages/db/.env` (Prisma CLI) are
+  both gitignored — never committed. Each developer creates their own from
+  `.env.example`. `apps/web/.env.local` is the one that matters for
+  `next dev`/`next build` — a copy at the repo root is silently ignored.
 - The Prisma client is generated into `node_modules` — run `pnpm db:generate` after any schema changes.
 - PostGIS `geography(Point, 4326)` columns use `Unsupported()` in Prisma — all geospatial queries (`ST_DWithin`, `ST_Distance`) must use `prisma.$queryRaw`.
 - The `feed_items` materialized view is refreshed via `POST /api/cron/refresh-feed` (manual/cron-triggered, `CRON_SECRET`-gated) — no automatic scheduling yet, real Inngest-based refresh is still a follow-up. Never compute the feed inline from the base tables.

@@ -128,4 +128,5 @@ code path that ever cleans it up — the R2 lifecycle-rule note in
    `CLOUDFLARE_IMAGES_ACCOUNT_HASH`.
 3. Apply the `20260803120000_add_review_photo_visibility` migration
    (`pnpm db:migrate`) — adds `ReviewPhoto.isVisible` and rebuilds
-   `feed_items` to filter photos by it.
+   `feed_items` to filter photos by it. Already applied to the Neon dev DB as
+   of 2026-08-03; a fresh database still needs this step run against it.

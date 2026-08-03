@@ -20,9 +20,9 @@ auto-update as reviews/photos change.
 
 - `refreshFeedView()` runs `REFRESH MATERIALIZED VIEW CONCURRENTLY feed_items`.
   `CONCURRENTLY` requires the unique index added in migration
-  `20260731120000_add_feed_items_unique_index` — **this needs to be applied
-  (`pnpm db:migrate`) before the refresh route will work**, it isn't applied
-  automatically.
+  `20260731120000_add_feed_items_unique_index` — applied to the Neon dev DB as
+  of 2026-08-03. A fresh database still needs `pnpm db:migrate` run against it
+  before the refresh route will work; it isn't applied automatically.
 - `POST /api/cron/refresh-feed` calls it, gated by a `CRON_SECRET` bearer
   token (not a Clerk session — added to the middleware's public allowlist for
   the same reason as the Clerk webhook route: it authenticates itself a
