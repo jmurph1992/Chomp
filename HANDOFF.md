@@ -9,7 +9,7 @@
 2026-08-04
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Real Clerk, Mapbox, and Cloudflare (R2 + Images) credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are now least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token — see "This session" below. Still need: a seeded DB to actually run/deploy.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Real Clerk, Mapbox, and Cloudflare (R2 + Images) credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is now seeded (6 trucks, reviews, a liked photo, refreshed feed) — see "This session" below. The app is ready to run/deploy against real data.**
 
 ---
 
@@ -147,10 +147,7 @@ pnpm dev
    nothing in the app cleans those up. See `/docs/features/photo-upload.md`.
 5. ~~Narrow the Cloudflare R2 API token's scope to `chomp-uploads` only~~ —
    **done 2026-08-04**, see "This session" below.
-6. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against the real
-   Neon dev database (now reachable — `packages/db/.env` has live credentials) to
-   get sample trucks, menu items, reviews, a seeded review photo with likes, and a
-   refreshed feed; nothing has data without it yet.
+6. ~~Seed the dev DB~~ — **done 2026-08-04**, see "This session" below.
 7. **Set `CRON_SECRET`** and point a scheduler at `POST /api/cron/refresh-feed`
    once deployed — nothing calls it automatically yet (see `/go-live-requirements/feed.md`).
 8. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
@@ -169,6 +166,23 @@ pnpm dev
     the go-live gaps above, plus anything net-new the user wants to add.
 
 ## This session (2026-08-04)
+- **Seeded the Neon dev DB** (closes Open Item 6 from the prior session):
+  - `pnpm install` was needed first — `tsx` was declared in
+    `packages/db/package.json` but missing from `node_modules` (dependencies
+    had drifted out of sync with the lockfile).
+  - **Found the generated Prisma Client was stale**: it didn't know about
+    `ReviewPhoto.isVisible` even though the migration adding that column
+    (`20260803120000_add_review_photo_visibility`) was applied to the DB last
+    session — applying a migration doesn't regenerate the client, that's a
+    separate step (`pnpm db:generate`), and nothing had exercised that field
+    on a `create` until the seed script tried to. Regenerated the client,
+    which fixed it.
+  - Ran `pnpm db:seed` from `packages/db` successfully: "Seeded 6 trucks and
+    refreshed the feed." Spot-checked row counts directly against the DB
+    afterward: 6 trucks, 4 reviews, 1 review photo, 3 rows in `feed_items`.
+  - The map, truck detail pages (Taco Kings/Pho Real have full menus and
+    reviews), and `/feed` (Alice's 5-star review + liked photo) should all
+    now show real data end-to-end.
 - **Narrowed Cloudflare R2/Images credentials to least privilege** (closes Open
   Item 5 from the prior session):
   - User created a fresh **Account**-type R2 API token in the dashboard,
