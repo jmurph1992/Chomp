@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-03
+2026-08-04
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Real Clerk, Mapbox, and Cloudflare (R2 + Images) credentials are now in `apps/web/.env.local` and verified working end-to-end. Still need: the Cloudflare R2 API token narrowed to just the `chomp-uploads` bucket (currently has account-wide R2 access, including two unrelated buckets from another project — see Open Items), and a seeded DB to actually run/deploy.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Real Clerk, Mapbox, and Cloudflare (R2 + Images) credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are now least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token — see "This session" below. Still need: a seeded DB to actually run/deploy.**
 
 ---
 
@@ -145,23 +145,8 @@ pnpm dev
    live and verified working (S3-signed request to R2, Cloudflare Images API call).
    Still not done: the lifecycle rule auto-expiring un-finalized uploads (~24h) —
    nothing in the app cleans those up. See `/docs/features/photo-upload.md`.
-5. **Narrow the Cloudflare R2 API token's scope to `chomp-uploads` only** — the
-   `CLOUDFLARE_API_TOKEN` in `apps/web/.env.local` currently has account-wide R2
-   access. Listing buckets with it returns `chomp-uploads` plus two buckets from an
-   apparently unrelated project on the same Cloudflare account
-   (`hivemind-releases`, `hivemind-uploads`) — a leak of this token exposes those
-   too. Separately, the R2 dashboard (**R2 → Manage R2 API Tokens**) shows two
-   token entries both named "Chomp uploads" — one **Account API token**, one
-   **User API token** — and that UI doesn't surface the Access Key ID anywhere to
-   determine which one actually backs the live `CLOUDFLARE_R2_ACCESS_KEY_ID` in
-   `.env.local`. Agreed approach (not yet executed): generate a fresh
-   **Account**-type R2 API token scoped to *"Apply to specific buckets only" →
-   `chomp-uploads`*, swap its new Access Key ID/Secret into `.env.local`, verify
-   the app still works, then delete **both** existing ambiguous "Chomp uploads"
-   token entries. Once that dedicated R2 token exists, also strip the R2
-   permission group off `CLOUDFLARE_API_TOKEN` itself, leaving it Images-only
-   (least privilege — it's a general REST API token, doesn't need R2 access at
-   all once a dedicated one exists).
+5. ~~Narrow the Cloudflare R2 API token's scope to `chomp-uploads` only~~ —
+   **done 2026-08-04**, see "This session" below.
 6. **Seed the dev DB** — run `pnpm db:seed` (from `packages/db`) against the real
    Neon dev database (now reachable — `packages/db/.env` has live credentials) to
    get sample trucks, menu items, reviews, a seeded review photo with likes, and a
@@ -182,6 +167,38 @@ pnpm dev
 12. **Feature development after this** — every major feature in the original
     product scope now has at least a first pass built. What's left is mostly
     the go-live gaps above, plus anything net-new the user wants to add.
+
+## This session (2026-08-04)
+- **Narrowed Cloudflare R2/Images credentials to least privilege** (closes Open
+  Item 5 from the prior session):
+  - User created a fresh **Account**-type R2 API token in the dashboard,
+    scoped to *"Apply to specific buckets only" → `chomp-uploads`*. Swapped
+    the new Access Key ID/Secret into `CLOUDFLARE_R2_ACCESS_KEY_ID`/
+    `CLOUDFLARE_R2_SECRET_ACCESS_KEY` in `apps/web/.env.local`.
+  - Verified with hand-signed SigV4 requests (stdlib `hmac`/`hashlib`,
+    throwaway script deleted after use, same approach as the prior session):
+    `ListObjectsV2` against `chomp-uploads` → `200`; the same request against
+    the account root (no bucket) → `403 AccessDenied`, confirming the new
+    token really is bucket-scoped and can't see `hivemind-releases`/
+    `hivemind-uploads` like the old one could.
+  - **The old general `CLOUDFLARE_API_TOKEN` was found deleted, not edited**,
+    while the user was in the dashboard trying to strip its R2 permission
+    group — a first check of both R2 and Images calls with it returned `401`
+    on *both* (not just R2), and the user confirmed it no longer appeared
+    under **My Profile → API Tokens** at all. No data was affected; user
+    created a replacement token scoped to **Account → Cloudflare Images →
+    Edit** only (matches what `lib/storage.ts` actually calls: create via
+    `POST /images/v1`, delete via `DELETE /images/v1/{id}`), no R2 permission.
+    Verified directly against Cloudflare's REST API: `GET .../r2/buckets` →
+    `403`, `GET .../images/v1` → `200`.
+  - Confirmed the two old ambiguous "Chomp uploads" R2 token entries (the
+    Account/User pair from **R2 → Manage R2 API Tokens** flagged in the prior
+    session) were deleted by the user — the old Access Key ID
+    (`f68a992a502e498d79fdbbc819d1f7b9`) now gets `401 Unauthorized` from R2's
+    S3-compatible API, confirming revocation.
+  - Net result: `CLOUDFLARE_R2_ACCESS_KEY_ID`/`SECRET` can only touch
+    `chomp-uploads`; `CLOUDFLARE_API_TOKEN` can only touch Images. Neither can
+    reach the unrelated `hivemind-*` buckets or each other's surface anymore.
 
 ## This session (2026-08-03)
 - Pulled 9 commits from `origin/main` (Clerk auth, map, truck detail, feed,
