@@ -37,7 +37,10 @@ ever written server-side — never from a client-supplied value:
    never downgrades an existing `operator` or `admin`.
 
 `admin` is not self-service anywhere — it's set out-of-band (Prisma Studio/direct
-DB access), same as `isVerified` on trucks.
+DB access), same as `verificationStatus` on trucks (see
+`/docs/features/truck-verification.md`) — and as of this pass, `admin` is also
+what gates `/admin/trucks`, so there's currently no seeded admin user in the
+dev DB either.
 
 ## Known gap: account deletion
 
@@ -67,5 +70,22 @@ in `/go-live-requirements`.
 2. Add a webhook endpoint in the Clerk dashboard pointing at
    `<your-domain>/api/webhooks/clerk`, subscribed to `user.created`, `user.updated`,
    `user.deleted`. Copy the signing secret into `CLERK_WEBHOOK_SECRET`.
-3. For local development, the webhook endpoint needs a public URL for Clerk to reach —
-   use a tunnel (ngrok, Clerk's CLI tunnel, etc.).
+3. For local development, the webhook endpoint needs a public URL for Clerk to reach.
+   We use Clerk's own CLI (no third-party tunnel account needed, tightest integration
+   with the Clerk dashboard):
+   - Install once: `npx clerk` (no install) or `pnpm add -g clerk` /
+     `curl -fsSL https://clerk.com/install | bash` for a persistent install.
+   - Run `pnpm dev` in one terminal (so `localhost:3000` is listening), then in
+     another terminal run:
+     `clerk webhooks listen --forward-to http://localhost:3000/api/webhooks/clerk`
+     This opens a relay tunnel and prints a public URL forwarding to the local route —
+     no dashboard-side webhook endpoint edit needed for this flow (it doesn't require
+     a linked project or the Platform API). Pass `--token <value>` to pin a stable,
+     reusable URL across restarts instead of getting a new one each time.
+   - Alternative: if you'd rather point Clerk's dashboard webhook config itself at a
+     tunnel (e.g. to test with the exact endpoint that'll run in production), swap in
+     ngrok or another generic tunnel and update the dashboard's webhook URL for the
+     dev Clerk instance only — never point a production webhook at a tunnel URL.
+   - Without this, sign-up/sign-in still works locally (Clerk's hosted UI doesn't need
+     the tunnel), but the `User` row never syncs — the webhook that creates it
+     (`apps/web/app/api/webhooks/clerk/route.ts`) has no way to reach `localhost`.

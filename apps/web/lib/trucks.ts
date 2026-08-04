@@ -1,6 +1,7 @@
 import { db, type User } from '@chomp/db'
 import { slugify } from '@chomp/utils'
 import type {
+  AdminTruckView,
   CreateTruckInput,
   TruckDetail,
   TruckMapMarker,
@@ -70,6 +71,7 @@ export async function getNearbyTrucks(
     FROM trucks t
     JOIN truck_locations tl ON tl.truck_id = t.id AND tl.is_current = true
     WHERE t.is_active = true
+      AND t.verification_status = 'verified'
       AND ST_DWithin(tl.geom, ST_MakePoint(${lng}, ${lat})::geography, ${radius})
     ORDER BY "distanceMeters" ASC
     LIMIT 100
@@ -80,7 +82,7 @@ export async function getNearbyTrucks(
 
 export async function getTruckBySlug(slug: string): Promise<TruckDetail | null> {
   const truck = await db.truck.findUnique({
-    where: { slug, isActive: true },
+    where: { slug, isActive: true, verificationStatus: 'verified' },
     include: {
       locations: { where: { isCurrent: true }, take: 1 },
       schedules: { where: { isCancelled: false } },
@@ -200,12 +202,15 @@ export async function getTruckForEdit(truckId: string): Promise<TruckProfileEdit
     logoUrl: truck.logoUrl,
     coverUrl: truck.coverUrl,
     isActive: truck.isActive,
+    verificationStatus: truck.verificationStatus,
+    verificationNote: truck.verificationNote,
   }
 }
 
 /**
- * Updates only the fields in TruckProfileInput — isVerified, ownerId, and slug
- * are never accepted here, not just omitted from the form.
+ * Updates only the fields in TruckProfileInput — verificationStatus,
+ * verificationNote, ownerId, and slug are never accepted here, not just
+ * omitted from the form.
  */
 export async function updateTruckProfile(truckId: string, input: TruckProfileInput): Promise<void> {
   if (!isValidTruckName(input.name)) throw new Error('Invalid truck name')
@@ -225,5 +230,67 @@ export async function updateTruckProfile(truckId: string, input: TruckProfileInp
       coverUrl: input.coverUrl,
       isActive: input.isActive,
     },
+  })
+}
+
+/**
+ * All trucks for the admin verification queue — deliberately unfiltered
+ * (unlike every customer-facing query above), since an admin needs to see
+ * pending/rejected trucks to review them and verified trucks to be able to
+ * put one on hold.
+ */
+export async function getAllTrucksForAdmin(): Promise<AdminTruckView[]> {
+  const trucks = await db.truck.findMany({
+    include: { owner: { select: { email: true } } },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  return trucks.map((truck) => ({
+    id: truck.id,
+    slug: truck.slug,
+    name: truck.name,
+    description: truck.description,
+    cuisineType: truck.cuisineType,
+    phone: truck.phone,
+    website: truck.website,
+    instagram: truck.instagram,
+    ownerEmail: truck.owner.email,
+    verificationStatus: truck.verificationStatus,
+    verificationNote: truck.verificationNote,
+    createdAt: truck.createdAt.toISOString(),
+  }))
+}
+
+/** Approves a truck (from any prior status) — clears any rejection/hold note. */
+export async function verifyTruck(truckId: string): Promise<void> {
+  await db.truck.update({
+    where: { id: truckId },
+    data: { verificationStatus: 'verified', verificationNote: null },
+  })
+}
+
+/** Declines a truck pre-launch. Requires a reason so the operator/admin trail is clear. */
+export async function rejectTruck(truckId: string, reason: string): Promise<void> {
+  if (!reason.trim()) throw new Error('A rejection reason is required')
+
+  await db.truck.update({
+    where: { id: truckId },
+    data: { verificationStatus: 'rejected', verificationNote: reason },
+  })
+}
+
+/**
+ * Pulls a previously verified truck back off the map without treating it as a
+ * fresh rejection — same visibility effect as pending/rejected (only
+ * verificationStatus === 'verified' trucks are ever shown to customers), but
+ * keeps the distinct status so the admin queue and operator dashboard can
+ * tell "was never approved" apart from "was approved, then pulled."
+ */
+export async function holdTruck(truckId: string, reason: string): Promise<void> {
+  if (!reason.trim()) throw new Error('A hold reason is required')
+
+  await db.truck.update({
+    where: { id: truckId },
+    data: { verificationStatus: 'onHold', verificationNote: reason },
   })
 }

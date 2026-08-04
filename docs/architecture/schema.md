@@ -42,7 +42,8 @@ trucks (
   instagram       text,
   logo_url        text,
   cover_url       text,
-  is_verified     boolean DEFAULT false,  -- set by admin after manual review
+  verification_status text DEFAULT 'pending', -- 'pending' | 'verified' | 'rejected' | 'onHold' — set by admin, see docs/features/truck-verification.md
+  verification_note   text,               -- rejection/hold reason, cleared on verify
   is_active       boolean DEFAULT true,
   created_at      timestamptz DEFAULT now()
 )

@@ -9,7 +9,7 @@
 2026-08-04
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Real Clerk, Mapbox, and Cloudflare (R2 + Images) credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is now seeded (6 trucks, reviews, a liked photo, refreshed feed) — see "This session" below. The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is now seeded (6 trucks, reviews, a liked photo, refreshed feed). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is also done: review submission, truck creation, and upload-slot requests are all limited via a shared Upstash Redis primitive. Truck verification is now also built: new trucks are hidden from the map/public page until an admin approves them via a new `/admin/trucks` queue, and a previously verified truck can be pulled back off the map ("on hold") — see "This session" below. The app is ready to run/deploy against real data.**
 
 ---
 
@@ -153,19 +153,143 @@ pnpm dev
 8. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
    no-op (see `/docs/features/auth.md` and `/go-live-requirements/auth.md`). Needs a
    real decision before launch.
-9. **Review submission rate limiting + a real moderation queue** — both deliberately
-   deferred, see `/go-live-requirements/reviews.md`.
-10. **Operator dashboard go-live gaps** — no truck-creation rate limiting, no
-    manager-invite flow, no way to delete a truck/transfer ownership — see
+9. ~~Review submission rate limiting~~ — **done 2026-08-04**, see "This session"
+   below. **Real moderation queue** still deliberately deferred, see
+   `/go-live-requirements/reviews.md`.
+10. ~~Operator dashboard truck-creation rate limiting~~ — **done 2026-08-04**.
+    Manager-invite flow and truck deletion/ownership transfer still open, see
     `/go-live-requirements/operator-dashboard.md`.
-11. **Photo upload go-live gaps** — R2 lifecycle rule not actually configured yet
-    (just documented), no rate limiting on upload-slot requests — see
+11. ~~Photo upload upload-slot rate limiting~~ — **done 2026-08-04**. R2
+    lifecycle rule still not actually configured (just documented), see
     `/go-live-requirements/photo-upload.md`.
 12. **Feature development after this** — every major feature in the original
     product scope now has at least a first pass built. What's left is mostly
     the go-live gaps above, plus anything net-new the user wants to add.
+13. ~~Truck verification (prevent fake truck accounts)~~ — **done 2026-08-04**,
+    see "This session" below and `/docs/features/truck-verification.md`. No
+    admin users exist yet in the seeded dev DB — see "Not yet done" in that
+    session's notes.
+14. **Operator notification on verification decisions** — deliberately
+    deferred (no Resend integration yet to hang it off of), see
+    `/docs/features/truck-verification.md`'s "Deliberately deferred" section.
 
-## This session (2026-08-04)
+## This session (2026-08-04, truck verification)
+- **Closed the "how do we prevent fake truck accounts" gap** — see
+  `/docs/features/truck-verification.md` for full details.
+- **Migration `20260804140000_add_truck_verification_status`**, applied to the
+  Neon dev DB after showing the user the exact SQL and getting explicit
+  approval (per `CLAUDE.md`'s migration rule): replaces the inert
+  `trucks.is_verified` boolean (never actually gated anything or had an admin
+  UI) with a 4-state `verification_status` enum (`pending`/`verified`/
+  `rejected`/`onHold`) + a `verification_note` text column. Hand-wrote the SQL
+  as three separate statements (add columns → backfill → drop old column)
+  rather than trusting `prisma migrate diff`'s single combined
+  `ALTER TABLE ... DROP COLUMN ... ADD COLUMN ...`, which would have dropped
+  `is_verified` before the backfill `UPDATE` could read it — confirmed this
+  by actually running the diff command and comparing. All 6 seeded trucks had
+  `is_verified = true`, so all backfilled to `verified` (user explicitly said
+  not to worry about preserving/re-seeding differently).
+- **Visibility gating**: `getTruckBySlug` and `getNearbyTrucks`
+  (`apps/web/lib/trucks.ts`) now both require `verificationStatus: 'verified'`
+  alongside the existing `isActive` check — a `pending`/`rejected`/`onHold`
+  truck 404s on its public page and never appears on the map. Dashboard
+  (`getTruckForEdit`) stays unfiltered so an operator can see/fix their own
+  non-verified truck.
+- **New admin surface** (`role === 'admin'`) — first one in the app:
+  `apps/web/lib/admin.ts#requireAdmin()`, `/admin/trucks` (queue listing every
+  truck regardless of status), `apps/web/app/actions/admin.ts`
+  (`verifyTruckAction`/`rejectTruckAction`/`holdTruckAction`). Reject and hold
+  both require a non-empty reason, stored in `verificationNote` and shown to
+  the operator; verify clears it. "On hold" (user's addition to the original
+  plan) lets an admin pull a *previously verified* truck back off the map
+  without it reading as a fresh pre-launch rejection.
+- **Dashboard status pill** (`components/dashboard/truck-profile-form.tsx`)
+  and a **"Verified" badge** on the public truck page (unconditional, since
+  `getTruckBySlug` only ever returns verified trucks now).
+- **Tests**: new `lib/admin.test.ts`, `app/actions/admin.test.ts`; extended
+  `lib/trucks.test.ts` for the new visibility filters, `getTruckForEdit`'s new
+  fields, and the three new mutator functions. Updated `packages/db/prisma/seed.ts`
+  (`isVerified: true` → `verificationStatus: 'verified'`) and one existing
+  test that referenced the old field name. Full `pnpm --filter @chomp/web test`:
+  189/189 passing. Full `pnpm type-check` across all 4 packages: clean.
+  Re-ran `pnpm db:seed` against the real Neon dev DB after the schema change
+  to confirm it still works end-to-end — it does.
+- **Not yet done / next session**: **no admin users exist in the dev DB** —
+  confirmed via a direct query (`SELECT ... WHERE role = 'admin'` → 0 rows).
+  `/admin/trucks` is built and gated correctly but nobody can currently reach
+  it without manually flipping a user's `role` to `admin` (e.g. via Prisma
+  Studio — there's no self-serve admin-promotion flow, deliberately, since
+  that would be its own security question). Also: none of this session's
+  changes are committed to git yet, left as unstaged for review, same as the
+  rate-limiting and dev-tooling work earlier today.
+
+## This session (2026-08-04, rate limiting)
+- **Closed roadmap item 2 ("Rate limiting, once")** — see `future-plans/roadmap.md`
+  and `/docs/features/rate-limiting.md` for full details.
+- **Created an Upstash Redis database** (`chomp-dev`) — this is the first real use
+  of Redis in the stack, ahead of its other documented uses (location/feed
+  caching). Credentials (`UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN`) are
+  in `apps/web/.env.local` and `.env.example`; verified working with a real `PING`
+  against the REST API (`200 PONG`).
+- **New shared primitive** `apps/web/lib/rate-limit.ts` — `@upstash/ratelimit`
+  sliding-window limiters (`reviewLimiter` 5/hour, `truckCreationLimiter` 3/day,
+  `uploadSlotLimiter` 20/hour), a `checkRateLimit(limiter, userId)` helper that
+  throws on limit-exceeded (matches the existing throw-on-reject pattern used by
+  `requireOperator`), keyed by Clerk `userId` since all three call sites already
+  require sign-in.
+- **Wired into three server actions**, right after resolving the acting user from
+  the Clerk session and before any DB/Cloudflare write: `submitReviewAction`
+  (`apps/web/app/actions/reviews.ts`), `createTruckAction`
+  (`apps/web/app/actions/trucks.ts`), `requestUploadSlotAction`
+  (`apps/web/app/actions/uploads.ts`). `finalizeUploadAction` deliberately left
+  unlimited — it can't be reached without a slot key from the (limited)
+  request-slot step.
+- **Tests**: new `lib/rate-limit.test.ts` (mocked Upstash client); added a
+  rate-limit-exceeded case to each of the three actions' existing test files
+  (`reviews.test.ts`, `trucks.test.ts`, `uploads.test.ts`), all mocking
+  `@/lib/rate-limit` the same way sibling libs are already mocked in those files.
+  Full `pnpm --filter @chomp/web test` run: 172/172 passing.
+- **Verified against the real Upstash database**, not just mocks: a throwaway
+  script (deleted after use, same pattern as prior credential-verification
+  sessions) hit the real REST API with a 2-per-window limiter, confirmed the 3rd
+  call was denied (`success: false`), then cleaned up its own test key.
+- **Not yet done**: none of this is committed to git — left as unstaged changes
+  for review. `pnpm-lock.yaml`/`packages/db/package.json` from the earlier dev-tooling
+  work in this same session are also still uncommitted.
+
+## This session (2026-08-04, dev tooling)
+- **Closed roadmap item 1 ("Make local dev solid")** — see `future-plans/roadmap.md`:
+  - `packages/db/package.json` now has `"postinstall": "prisma generate"`, so any
+    `pnpm install` (fresh clone, or after pulling a migration) regenerates the client
+    automatically. This is the actual fix for the "stale client missing
+    `ReviewPhoto.isVisible`" bug from the seeding session earlier today — that bug
+    can't be caught by a git-diff-style check because the generated client isn't
+    committed (`node_modules` is gitignored, no custom Prisma `output` path).
+  - Added `husky` as a root dev dependency (`pnpm exec husky init`) with a
+    `.husky/pre-commit` hook that only runs when relevant files are staged, to stay
+    fast on unrelated commits:
+    - If `packages/db/prisma/schema.prisma` or a migration file is staged: runs
+      `prisma validate` then `prisma generate` in `packages/db`.
+    - If any `package.json` or `pnpm-lock.yaml` is staged: runs
+      `pnpm install --frozen-lockfile`, which fails immediately (without mutating the
+      lockfile) if `package.json` deps and `pnpm-lock.yaml` have drifted apart — this
+      is the actual fix for the "tsx declared but missing from `node_modules`" bug
+      from earlier today.
+  - **Verified both checks actually block a bad commit**, not just that the script
+    runs: staged a `package.json` with an extra dependency not in the lockfile → hook
+    failed with `ERR_PNPM_OUTDATED_LOCKFILE`, commit blocked. Staged a syntactically
+    broken `schema.prisma` → hook failed with Prisma's `P1012` validation error,
+    commit blocked. Reverted both test changes, then confirmed a real, valid change
+    (the `postinstall` addition itself) committed cleanly through the hook.
+  - Documented the Clerk CLI webhook tunnel workflow in `/docs/features/auth.md`
+    (setup checklist, step 3) — verified the actual current command via Clerk's docs
+    rather than guessing: `clerk webhooks listen --forward-to
+    http://localhost:3000/api/webhooks/clerk` (Clerk CLI 2.0's webhooks toolkit,
+    no linked project/Platform API required, `--token` pins a stable URL across
+    restarts). Not yet exercised end-to-end against a real local sign-up in this
+    environment — next session should actually run it and confirm a `User` row syncs.
+
+## This session (2026-08-04, DB seeding)
 - **Seeded the Neon dev DB** (closes Open Item 6 from the prior session):
   - `pnpm install` was needed first — `tsx` was declared in
     `packages/db/package.json` but missing from `node_modules` (dependencies
@@ -443,6 +567,7 @@ pnpm dev
 | `20260506223040_add_feed_view` | `feed_items` materialized view + index for the public feed | Yes |
 | `20260731120000_add_feed_items_unique_index` | Unique index on `feed_items.item_id`, required for `REFRESH MATERIALIZED VIEW CONCURRENTLY` | Yes (applied 2026-08-03) |
 | `20260803120000_add_review_photo_visibility` | Adds `review_photos.is_visible`; rebuilds `feed_items` to filter the photo side by it too | Yes (applied 2026-08-03) |
+| `20260804140000_add_truck_verification_status` | Replaces `trucks.is_verified` (boolean) with `verification_status` (enum: pending/verified/rejected/onHold) + `verification_note`; backfills `is_verified = true` → `verified` | Yes (applied 2026-08-04) |
 
 ---
 

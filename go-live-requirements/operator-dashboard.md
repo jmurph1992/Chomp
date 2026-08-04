@@ -1,9 +1,14 @@
 # Operator Dashboard — go-live requirements
 
-- **No rate limiting on truck creation.** Any signed-in user can call
-  `createTruckAction` repeatedly — nothing stops someone from spam-creating
-  trucks. Same category of gap as review-submission rate limiting
-  (`/go-live-requirements/reviews.md`).
+- ~~No rate limiting on truck creation~~ — **done**, see
+  `/docs/features/rate-limiting.md`. `createTruckAction` is limited to 3/day
+  per user via Upstash Redis.
+- ~~No way to prevent fake truck accounts~~ — **done 2026-08-04**, see
+  `/docs/features/truck-verification.md`. New trucks are hidden from the map
+  and their public page until an admin verifies them via `/admin/trucks`;
+  an admin can also pull a previously verified truck back off the map
+  ("on hold") if it turns out to be fraudulent later. This is a *visibility*
+  lever, not a deletion one — see the next item, still open.
 - **No manager-invite flow.** `TruckOperator(role: manager)` is fully
   functional (full permission parity with owner) but nothing in the product
   creates that row — an owner can't add a manager. Needs its own UI before

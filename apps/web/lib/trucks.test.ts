@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const queryRaw = vi.fn()
 const findUnique = vi.fn()
+const findMany = vi.fn()
 const truckUpdate = vi.fn()
 const txTruckCreate = vi.fn()
 const txTruckOperatorCreate = vi.fn()
@@ -18,7 +19,7 @@ vi.mock('@chomp/db', () => ({
   db: {
     $queryRaw: queryRaw,
     $transaction: transaction,
-    truck: { findUnique, update: truckUpdate },
+    truck: { findUnique, findMany, update: truckUpdate },
   },
 }))
 
@@ -28,6 +29,10 @@ const {
   createTruck,
   getTruckForEdit,
   updateTruckProfile,
+  getAllTrucksForAdmin,
+  verifyTruck,
+  rejectTruck,
+  holdTruck,
   isValidTruckName,
   isValidTruckDescription,
   isValidCuisineType,
@@ -64,6 +69,15 @@ describe('getNearbyTrucks', () => {
     expect(result).toEqual(rows)
     expect(queryRaw).toHaveBeenCalledTimes(1)
   })
+
+  it('only queries verified, active trucks', async () => {
+    queryRaw.mockResolvedValue([])
+    await getNearbyTrucks(30.2672, -97.7431, 5000)
+
+    const sql = (queryRaw.mock.calls.at(0)?.at(0) as string[]).join('')
+    expect(sql).toContain('t.is_active = true')
+    expect(sql).toContain("t.verification_status = 'verified'")
+  })
 })
 
 describe('getTruckBySlug', () => {
@@ -78,7 +92,9 @@ describe('getTruckBySlug', () => {
 
     expect(result).toBeNull()
     expect(findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { slug: 'does-not-exist', isActive: true } }),
+      expect.objectContaining({
+        where: { slug: 'does-not-exist', isActive: true, verificationStatus: 'verified' },
+      }),
     )
   })
 
@@ -266,6 +282,29 @@ describe('getTruckForEdit', () => {
     findUnique.mockResolvedValue(null)
     expect(await getTruckForEdit('t1')).toBeNull()
   })
+
+  it('includes verificationStatus and verificationNote for the dashboard status pill', async () => {
+    findUnique.mockResolvedValue({
+      id: 't1',
+      slug: 'taco-kings',
+      name: 'Taco Kings',
+      description: null,
+      cuisineType: [],
+      phone: null,
+      website: null,
+      instagram: null,
+      logoUrl: null,
+      coverUrl: null,
+      isActive: true,
+      verificationStatus: 'rejected',
+      verificationNote: 'Duplicate listing',
+    })
+
+    const result = await getTruckForEdit('t1')
+
+    expect(result?.verificationStatus).toBe('rejected')
+    expect(result?.verificationNote).toBe('Duplicate listing')
+  })
 })
 
 describe('updateTruckProfile', () => {
@@ -290,14 +329,101 @@ describe('updateTruckProfile', () => {
     expect(truckUpdate).not.toHaveBeenCalled()
   })
 
-  it('updates only the writable fields — never isVerified, ownerId, or slug', async () => {
+  it('updates only the writable fields — never verificationStatus, verificationNote, ownerId, or slug', async () => {
     truckUpdate.mockResolvedValue({})
     await updateTruckProfile('t1', validInput)
 
     const call = truckUpdate.mock.calls.at(0)?.at(0)
     expect(call.where).toEqual({ id: 't1' })
-    expect(call.data).not.toHaveProperty('isVerified')
+    expect(call.data).not.toHaveProperty('verificationStatus')
+    expect(call.data).not.toHaveProperty('verificationNote')
     expect(call.data).not.toHaveProperty('ownerId')
     expect(call.data).not.toHaveProperty('slug')
+  })
+})
+
+describe('getAllTrucksForAdmin', () => {
+  beforeEach(() => findMany.mockReset())
+
+  it('returns every truck regardless of status, with the owner email', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 't1',
+        slug: 'taco-kings',
+        name: 'Taco Kings',
+        description: null,
+        cuisineType: ['mexican'],
+        phone: null,
+        website: null,
+        instagram: null,
+        owner: { email: 'owner@example.com' },
+        verificationStatus: 'pending',
+        verificationNote: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+      },
+    ])
+
+    const result = await getAllTrucksForAdmin()
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 't1',
+        ownerEmail: 'owner@example.com',
+        verificationStatus: 'pending',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      }),
+    ])
+  })
+})
+
+describe('verifyTruck', () => {
+  beforeEach(() => truckUpdate.mockReset())
+
+  it('sets verified and clears any prior note', async () => {
+    truckUpdate.mockResolvedValue({})
+    await verifyTruck('t1')
+
+    expect(truckUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { verificationStatus: 'verified', verificationNote: null },
+    })
+  })
+})
+
+describe('rejectTruck', () => {
+  beforeEach(() => truckUpdate.mockReset())
+
+  it('requires a non-empty reason, without writing', async () => {
+    await expect(rejectTruck('t1', '   ')).rejects.toThrow('reason is required')
+    expect(truckUpdate).not.toHaveBeenCalled()
+  })
+
+  it('sets rejected with the given reason', async () => {
+    truckUpdate.mockResolvedValue({})
+    await rejectTruck('t1', 'Fake business')
+
+    expect(truckUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { verificationStatus: 'rejected', verificationNote: 'Fake business' },
+    })
+  })
+})
+
+describe('holdTruck', () => {
+  beforeEach(() => truckUpdate.mockReset())
+
+  it('requires a non-empty reason, without writing', async () => {
+    await expect(holdTruck('t1', '')).rejects.toThrow('reason is required')
+    expect(truckUpdate).not.toHaveBeenCalled()
+  })
+
+  it('sets onHold with the given reason', async () => {
+    truckUpdate.mockResolvedValue({})
+    await holdTruck('t1', 'Health code complaint')
+
+    expect(truckUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { verificationStatus: 'onHold', verificationNote: 'Health code complaint' },
+    })
   })
 })

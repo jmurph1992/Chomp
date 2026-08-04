@@ -2,6 +2,7 @@
 
 import type { UploadSlot } from '@chomp/types'
 import { getCurrentUser } from '@/lib/auth'
+import { checkRateLimit, uploadSlotLimiter } from '@/lib/rate-limit'
 import { createUploadSlot, ingestUploadedImage } from '@/lib/storage'
 
 /**
@@ -15,6 +16,7 @@ import { createUploadSlot, ingestUploadedImage } from '@/lib/storage'
 export async function requestUploadSlotAction(contentType: string): Promise<UploadSlot> {
   const user = await getCurrentUser()
   if (!user) throw new Error('Sign in required')
+  await checkRateLimit(uploadSlotLimiter, user.id)
 
   return createUploadSlot(contentType)
 }

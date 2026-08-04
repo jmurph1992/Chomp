@@ -57,6 +57,11 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
           />
         )}
         <h1 className="text-3xl font-bold">{truck.name}</h1>
+        {/* getTruckBySlug only ever returns verified trucks (see lib/trucks.ts) — every
+            truck that reaches this page is verified, so the badge is unconditional. */}
+        <span className="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
+          Verified
+        </span>
       </div>
       {truck.cuisineType.length > 0 && (
         <p className="mt-1 text-gray-500">{truck.cuisineType.join(', ')}</p>

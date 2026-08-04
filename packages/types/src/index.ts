@@ -107,9 +107,10 @@ export type CreateTruckInput = {
 }
 
 /**
- * Writable truck profile fields. Deliberately excludes isVerified (admin-only,
- * set outside this feature), ownerId, and slug (immutable after creation) —
- * never accept these as input to an update, not just hide them in a form.
+ * Writable truck profile fields. Deliberately excludes verificationStatus/
+ * verificationNote (admin-only, set outside this feature), ownerId, and slug
+ * (immutable after creation) — never accept these as input to an update, not
+ * just hide them in a form.
  */
 export type TruckProfileInput = {
   name: string
@@ -123,10 +124,36 @@ export type TruckProfileInput = {
   isActive: boolean
 }
 
-/** Full profile as shown in the dashboard edit form. */
+/**
+ * pending: awaiting admin review. verified: publicly visible. rejected: admin
+ * declined pre-launch (see the note for why). onHold: was verified, an admin
+ * pulled it back off the map (see the note for why) without treating it as a
+ * fresh rejection.
+ */
+export type VerificationStatusValue = 'pending' | 'verified' | 'rejected' | 'onHold'
+
+/** Full profile as shown in the dashboard edit form — status fields are read-only here. */
 export type TruckProfileEdit = TruckProfileInput & {
   id: string
   slug: string
+  verificationStatus: VerificationStatusValue
+  verificationNote: string | null
+}
+
+/** A truck as shown in the admin verification queue. */
+export type AdminTruckView = {
+  id: string
+  slug: string
+  name: string
+  description: string | null
+  cuisineType: string[]
+  phone: string | null
+  website: string | null
+  instagram: string | null
+  ownerEmail: string
+  verificationStatus: VerificationStatusValue
+  verificationNote: string | null
+  createdAt: string
 }
 
 /** Input for creating/updating a menu category. */

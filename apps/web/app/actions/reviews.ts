@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
+import { checkRateLimit, reviewLimiter } from '@/lib/rate-limit'
 import {
   canModerateReviews,
   deleteReview,
@@ -17,6 +18,7 @@ export async function submitReviewAction(
 ): Promise<void> {
   const user = await getCurrentUser()
   if (!user) throw new Error('Sign in to write a review')
+  await checkRateLimit(reviewLimiter, user.id)
 
   await upsertReview({ truckId, userId: user.id, rating, body })
   revalidatePath(`/trucks/${slug}`)

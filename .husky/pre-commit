@@ -1,0 +1,17 @@
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+
+# Only pay the cost of these checks when files that can actually cause the
+# drift bugs from the 2026-08-04 session are part of this commit.
+schema_changed=$(echo "$staged" | grep -E '^packages/db/prisma/(schema\.prisma|migrations/)' || true)
+deps_changed=$(echo "$staged" | grep -E '(^|/)package\.json$|^pnpm-lock\.yaml$' || true)
+
+if [ -n "$schema_changed" ]; then
+  echo "pre-commit: schema/migration change detected, validating Prisma schema..."
+  pnpm --filter @chomp/db exec prisma validate || exit 1
+  pnpm --filter @chomp/db exec prisma generate || exit 1
+fi
+
+if [ -n "$deps_changed" ]; then
+  echo "pre-commit: dependency change detected, checking lockfile is in sync..."
+  pnpm install --frozen-lockfile || exit 1
+fi

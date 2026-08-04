@@ -20,11 +20,13 @@
     "@chomp/types": "workspace:*",
     "@chomp/utils": "workspace:*",
     "@clerk/nextjs": "^6",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.2",
+    "clsx": "^2",
     "mapbox-gl": "^3",
     "next": "^15",
     "react": "^19",
     "react-dom": "^19",
-    "clsx": "^2",
     "tailwind-merge": "^2"
   },
   "engines": {
@@ -33,13 +35,13 @@
   "devDependencies": {
     "@clerk/testing": "^1",
     "@playwright/test": "^1",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4",
     "standardwebhooks": "^1",
     "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4",
     "typescript": "^5",
     "vitest": "^3"
   }

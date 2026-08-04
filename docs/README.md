@@ -16,6 +16,8 @@
 | [Public Feed](./features/feed.md) | Done | Recent high-rated reviews/photos, materialized view + refresh route |
 | [Operator Dashboard](./features/operator-dashboard.md) | Done | Truck creation, profile/menu/schedule/location CRUD, truck switcher |
 | [Photo Upload](./features/photo-upload.md) | Done | R2 + Cloudflare Images hybrid upload, powers review/menu/logo photos |
+| [Rate Limiting](./features/rate-limiting.md) | Done | Shared Upstash Redis primitive limiting review submission, truck creation, upload-slot requests |
+| [Truck Verification](./features/truck-verification.md) | Done | Admin review queue; new trucks hidden from the map/public page until verified |
 
 ---
 

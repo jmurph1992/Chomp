@@ -6,9 +6,11 @@ const createTruck = vi.fn()
 const updateTruckProfile = vi.fn()
 const getNearbyTrucks = vi.fn()
 const revalidatePath = vi.fn()
+const checkRateLimit = vi.fn()
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/operators', () => ({ requireOperator }))
+vi.mock('@/lib/rate-limit', () => ({ checkRateLimit, truckCreationLimiter: {} }))
 vi.mock('@/lib/trucks', () => ({ createTruck, updateTruckProfile, getNearbyTrucks }))
 vi.mock('@/lib/geo', () => ({
   DEFAULT_RADIUS_METERS: 16093,
@@ -26,6 +28,7 @@ describe('createTruckAction', () => {
     getCurrentUser.mockReset()
     createTruck.mockReset()
     revalidatePath.mockReset()
+    checkRateLimit.mockReset().mockResolvedValue(undefined)
   })
 
   it('rejects when signed out, without creating anything', async () => {
@@ -36,12 +39,23 @@ describe('createTruckAction', () => {
     expect(createTruck).not.toHaveBeenCalled()
   })
 
+  it('rejects when the caller has hit the truck-creation rate limit, without creating anything', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'u1', role: 'customer' })
+    checkRateLimit.mockRejectedValue(new Error("You're doing that too often — try again in a bit."))
+
+    await expect(
+      createTruckAction({ name: 'Taco Kings', description: null, cuisineType: [] }),
+    ).rejects.toThrow('too often')
+    expect(createTruck).not.toHaveBeenCalled()
+  })
+
   it('creates the truck as the signed-in user and returns it', async () => {
     getCurrentUser.mockResolvedValue({ id: 'u1', role: 'customer' })
     createTruck.mockResolvedValue({ id: 't1', slug: 'taco-kings' })
 
     const result = await createTruckAction({ name: 'Taco Kings', description: null, cuisineType: [] })
 
+    expect(checkRateLimit).toHaveBeenCalledWith(expect.anything(), 'u1')
     expect(createTruck).toHaveBeenCalledWith(
       { id: 'u1', role: 'customer' },
       { name: 'Taco Kings', description: null, cuisineType: [] },

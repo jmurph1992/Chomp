@@ -6,8 +6,10 @@ const deleteReview = vi.fn()
 const setReviewVisibility = vi.fn()
 const canModerateReviews = vi.fn()
 const revalidatePath = vi.fn()
+const checkRateLimit = vi.fn()
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
+vi.mock('@/lib/rate-limit', () => ({ checkRateLimit, reviewLimiter: {} }))
 vi.mock('@/lib/reviews', () => ({ upsertReview, deleteReview, setReviewVisibility, canModerateReviews }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 
@@ -20,6 +22,7 @@ describe('submitReviewAction', () => {
     getCurrentUser.mockReset()
     upsertReview.mockReset()
     revalidatePath.mockReset()
+    checkRateLimit.mockReset().mockResolvedValue(undefined)
   })
 
   it('rejects when signed out, without touching the database', async () => {
@@ -29,12 +32,21 @@ describe('submitReviewAction', () => {
     expect(upsertReview).not.toHaveBeenCalled()
   })
 
+  it('rejects when the caller has hit the review rate limit, without touching the database', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'u1', role: 'customer' })
+    checkRateLimit.mockRejectedValue(new Error("You're doing that too often — try again in a bit."))
+
+    await expect(submitReviewAction('t1', 'taco-kings', 5, 'Great!')).rejects.toThrow('too often')
+    expect(upsertReview).not.toHaveBeenCalled()
+  })
+
   it('upserts using the server-resolved user id, never a client-supplied one', async () => {
     getCurrentUser.mockResolvedValue({ id: 'u1', role: 'customer' })
     upsertReview.mockResolvedValue(undefined)
 
     await submitReviewAction('t1', 'taco-kings', 5, 'Great!')
 
+    expect(checkRateLimit).toHaveBeenCalledWith(expect.anything(), 'u1')
     expect(upsertReview).toHaveBeenCalledWith({
       truckId: 't1',
       userId: 'u1',

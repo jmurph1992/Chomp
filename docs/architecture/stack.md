@@ -27,7 +27,7 @@ Chomp is a Next.js monorepo targeting web first, with native mobile apps planned
 | Styling | Tailwind CSS + shadcn/ui | Fast, consistent UI |
 | Database | PostgreSQL 18 + PostGIS on Neon | Geospatial queries; serverless Postgres; existing account |
 | ORM | Prisma | Great DX + migrations; raw SQL via `$queryRaw` for PostGIS queries only |
-| Cache | Redis | 30-min location snapshots; feed cache |
+| Cache | Redis (Upstash) | First wired-up use is rate limiting (see `/docs/features/rate-limiting.md`); still planned for 30-min location snapshots and feed cache |
 | Background Jobs | Inngest | Serverless-friendly; no Redis queue management |
 | Auth | Clerk | Operator/customer/admin roles; best DX |
 | Email | Resend | Simple API; great Next.js integration |

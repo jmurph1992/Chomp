@@ -6,6 +6,7 @@ import { createTruck, getNearbyTrucks, updateTruckProfile } from '@/lib/trucks'
 import { DEFAULT_RADIUS_METERS, isValidLat, isValidLng } from '@/lib/geo'
 import { getCurrentUser } from '@/lib/auth'
 import { requireOperator } from '@/lib/operators'
+import { checkRateLimit, truckCreationLimiter } from '@/lib/rate-limit'
 
 /**
  * Called from the client map once browser geolocation resolves, to re-center
@@ -30,6 +31,7 @@ export async function createTruckAction(
 ): Promise<{ id: string; slug: string }> {
   const user = await getCurrentUser()
   if (!user) throw new Error('Sign in required')
+  await checkRateLimit(truckCreationLimiter, user.id)
 
   const truck = await createTruck(user, input)
   revalidatePath('/dashboard')

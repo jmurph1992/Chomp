@@ -86,14 +86,15 @@ Component can't do) if the user operates more than one truck.
 - ~~No image upload~~ **Resolved**: logo/cover and menu item photos now use
   the real upload flow (`ImageUploadField`, `/docs/features/photo-upload.md`)
   instead of paste-a-URL.
-- **No rate limiting** on truck creation — tracked in
-  `/go-live-requirements/operator-dashboard.md`.
+- ~~No rate limiting~~ **Resolved**: truck creation is now limited to 3/day
+  per user, see `/docs/features/rate-limiting.md`.
 - **Slug is immutable** after creation — avoids broken links/SEO churn and a
   whole class of uniqueness-on-update complexity for a field nothing
   currently needs to change.
-- **`isVerified` is never operator-editable** — admin-only, per the schema's
-  own comment. Every update function's accepted input type simply doesn't
-  include it, rather than hiding it in the UI and hoping.
+- **`verificationStatus`/`verificationNote` are never operator-editable** —
+  admin-only, per the schema's own comment. Every update function's accepted
+  input type simply doesn't include them, rather than hiding it in the UI and
+  hoping. See `/docs/features/truck-verification.md`.
 
 ## Testing
 

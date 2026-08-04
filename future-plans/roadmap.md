@@ -3,21 +3,24 @@
 > Not go-live blockers (those live in `/go-live-requirements/`) — this is the
 > broader list of what's next, grouped by theme. Updated as priorities shift.
 
-## 1. Make local dev solid
-- Local Clerk webhooks can't reach `localhost` — sign-up doesn't sync a
-  `User` row without a tunnel (ngrok, Clerk's own CLI tunnel). Documented in
-  `/docs/features/auth.md` but not set up in this environment yet.
-- No CI/check that fails when the generated Prisma Client drifts from
-  `schema.prisma`, or when `packages/db`'s declared deps (e.g. `tsx`) go
-  missing from `node_modules`. Both bit us in the 2026-08-04 session — silent
-  until something actually exercises the missing piece.
+## 1. Make local dev solid — done 2026-08-04
+- ~~Local Clerk webhooks can't reach `localhost`~~ — documented the
+  `clerk webhooks listen --forward-to` workflow in `/docs/features/auth.md`.
+- ~~No check that fails when the generated Prisma Client drifts from
+  `schema.prisma`, or when `packages/db`'s declared deps go missing~~ —
+  `packages/db` now has a `postinstall: prisma generate` so the client can't
+  go stale after `pnpm install`, and a husky `pre-commit` hook runs
+  `prisma validate`/`prisma generate` when `schema.prisma`/migrations are
+  staged and `pnpm install --frozen-lockfile` when any `package.json`/
+  `pnpm-lock.yaml` is staged — both verified to actually block a bad commit
+  (see HANDOFF.md, 2026-08-04 session).
 
-## 2. Rate limiting, once
-Three separate `/go-live-requirements/*.md` files (reviews, operator
-dashboard, photo upload) each ask for rate limiting on a signed-in user's
-write actions (review submission, truck creation, upload-slot requests).
-Worth solving once with a shared primitive once Redis is wired up, rather
-than three bespoke implementations.
+## 2. Rate limiting, once — done 2026-08-04
+Closed all three `/go-live-requirements/*.md` asks (reviews, operator
+dashboard, photo upload) with one shared primitive
+(`apps/web/lib/rate-limit.ts`) on Upstash Redis — this also wires up Redis
+for the first time in the stack, ahead of its other documented uses
+(location/feed caching). Full details in `/docs/features/rate-limiting.md`.
 
 ## 3. Operational completeness
 - Review moderation queue (admins can only one-way hide from the truck page

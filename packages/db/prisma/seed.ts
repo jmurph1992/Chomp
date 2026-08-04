@@ -195,7 +195,7 @@ async function main() {
         slug,
         description: `${truck.name} — seeded test data.`,
         cuisineType: [...truck.cuisine],
-        isVerified: true,
+        verificationStatus: 'verified',
         isActive: true,
       },
     })
