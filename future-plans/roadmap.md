@@ -73,3 +73,22 @@ scoping before building):
 - `/go-live-requirements/operator-dashboard.md` still says image upload is
   "blocked on Cloudflare R2/Images" — stale since photo upload shipped. Small
   fix, not urgent.
+
+## Operational completeness — prioritized (2026-08-05)
+Next session starts here: review moderation queue first.
+
+1. **Review moderation queue** — admin UI to view/unhide reviews, not just
+   one-way hide. Natural follow-on to the truck-verification admin surface
+   shipped 2026-08-04.
+2. **Feed refresh scheduler** — wire up the existing
+   `POST /api/cron/refresh-feed` to Vercel Cron or Inngest. Small,
+   self-contained, no new product decisions needed.
+3. **R2 lifecycle rule** — configure the ~24h auto-expiry on the bucket for
+   orphaned uploads. Already documented, just needs the Cloudflare-side
+   config.
+4. **Manager-invite flow** — build the UI/action to create
+   `TruckOperator(role: manager)` rows. Needs a product decision on invite
+   mechanics (email invite? link? who can revoke?) before implementation.
+5. **Truck deletion / ownership transfer** — highest-risk item: touches data
+   retention, reviews/photos cascade behavior, and ownership handoff. Needs
+   the most product decision-making up front.
