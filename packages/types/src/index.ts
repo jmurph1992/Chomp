@@ -229,6 +229,23 @@ export type ReviewSummary = {
   reviewCount: number
 }
 
+/** A review as shown in the admin moderation queue, across all trucks. */
+export type AdminReviewView = {
+  id: string
+  truckId: string
+  truckSlug: string
+  truckName: string
+  userDisplayName: string | null
+  userEmail: string
+  rating: number
+  body: string | null
+  isVisible: boolean
+  moderationNote: string | null
+  moderatedByEmail: string | null
+  moderatedAt: string | null
+  createdAt: string
+}
+
 // ─── Feed ─────────────────────────────────────────────────────────────────────
 
 export type FeedItemType = 'review' | 'photo'

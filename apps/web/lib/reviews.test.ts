@@ -17,13 +17,13 @@ vi.mock('./review-photos', () => ({ deleteReviewPhoto }))
 
 const {
   isValidReviewBody,
-  canModerateReviews,
   getVisibleReviewsForTruck,
   getReviewSummary,
   getOwnReview,
   upsertReview,
   deleteReview,
   setReviewVisibility,
+  getAllReviewsForAdmin,
   MAX_REVIEW_BODY_LENGTH,
 } = await import('./reviews')
 
@@ -40,15 +40,6 @@ describe('isValidReviewBody', () => {
 
   it('rejects strings over the max length', () => {
     expect(isValidReviewBody('a'.repeat(MAX_REVIEW_BODY_LENGTH + 1))).toBe(false)
-  })
-})
-
-describe('canModerateReviews', () => {
-  it('is true only for admin', () => {
-    expect(canModerateReviews('admin')).toBe(true)
-    expect(canModerateReviews('customer')).toBe(false)
-    expect(canModerateReviews('operator')).toBe(false)
-    expect(canModerateReviews(undefined)).toBe(false)
   })
 })
 
@@ -246,10 +237,114 @@ describe('deleteReview', () => {
 })
 
 describe('setReviewVisibility', () => {
-  it('updates isVisible by review id', async () => {
-    update.mockResolvedValue({})
-    await setReviewVisibility('r1', false)
+  beforeEach(() => update.mockReset())
 
-    expect(update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { isVisible: false } })
+  it('rejects an empty reason without touching the database', async () => {
+    await expect(setReviewVisibility('r1', false, '  ', 'admin1')).rejects.toThrow(
+      'A moderation reason is required',
+    )
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('updates isVisible, moderationNote, moderatedByUserId, and moderatedAt', async () => {
+    update.mockResolvedValue({})
+    await setReviewVisibility('r1', false, 'Spam', 'admin1')
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'r1' },
+      data: {
+        isVisible: false,
+        moderationNote: 'Spam',
+        moderatedByUserId: 'admin1',
+        moderatedAt: expect.any(Date),
+      },
+    })
+  })
+
+  it('works the same way for unhiding', async () => {
+    update.mockResolvedValue({})
+    await setReviewVisibility('r1', true, 'False positive', 'admin1')
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'r1' },
+      data: {
+        isVisible: true,
+        moderationNote: 'False positive',
+        moderatedByUserId: 'admin1',
+        moderatedAt: expect.any(Date),
+      },
+    })
+  })
+})
+
+describe('getAllReviewsForAdmin', () => {
+  beforeEach(() => findMany.mockReset())
+
+  it('queries every review, newest first, with no visibility filter', async () => {
+    findMany.mockResolvedValue([])
+    await getAllReviewsForAdmin()
+
+    const call = findMany.mock.calls.at(0)?.at(0)
+    expect(call.where).toBeUndefined()
+    expect(call.orderBy).toEqual({ createdAt: 'desc' })
+  })
+
+  it('maps a row including truck, reviewer, and moderation info', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'r1',
+        truckId: 't1',
+        rating: 5,
+        body: 'Great!',
+        isVisible: false,
+        moderationNote: 'Spam',
+        moderatedAt: new Date('2026-01-02T00:00:00Z'),
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        truck: { slug: 'taco-kings', name: 'Taco Kings' },
+        user: { displayName: 'Ada', email: 'ada@example.com' },
+        moderator: { email: 'admin@example.com' },
+      },
+    ])
+
+    const result = await getAllReviewsForAdmin()
+
+    expect(result[0]).toEqual({
+      id: 'r1',
+      truckId: 't1',
+      truckSlug: 'taco-kings',
+      truckName: 'Taco Kings',
+      userDisplayName: 'Ada',
+      userEmail: 'ada@example.com',
+      rating: 5,
+      body: 'Great!',
+      isVisible: false,
+      moderationNote: 'Spam',
+      moderatedByEmail: 'admin@example.com',
+      moderatedAt: '2026-01-02T00:00:00.000Z',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+  })
+
+  it('maps a never-moderated review to null moderation fields', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'r1',
+        truckId: 't1',
+        rating: 5,
+        body: null,
+        isVisible: true,
+        moderationNote: null,
+        moderatedAt: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        truck: { slug: 'taco-kings', name: 'Taco Kings' },
+        user: { displayName: null, email: 'ada@example.com' },
+        moderator: null,
+      },
+    ])
+
+    const result = await getAllReviewsForAdmin()
+
+    expect(result[0]!.moderatedByEmail).toBeNull()
+    expect(result[0]!.moderatedAt).toBeNull()
   })
 })

@@ -2,8 +2,8 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 
 // Routes anyone can view without signing in: discovery surfaces (map, feed,
 // truck pages), auth pages themselves, and routes that authenticate
-// themselves some other way (Clerk webhook via svix signature, cron routes
-// via CRON_SECRET) rather than via a Clerk session.
+// themselves some other way (Clerk webhook via svix signature, Inngest via
+// its own signing key) rather than via a Clerk session.
 const isPublicRoute = createRouteMatcher([
   '/',
   '/sign-in(.*)',
@@ -11,7 +11,7 @@ const isPublicRoute = createRouteMatcher([
   '/trucks(.*)',
   '/feed(.*)',
   '/api/webhooks(.*)',
-  '/api/cron(.*)',
+  '/api/inngest(.*)',
 ])
 
 export default clerkMiddleware(async (auth, req) => {

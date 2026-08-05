@@ -50,11 +50,12 @@ model User {
   avatarUrl   String?  @map("avatar_url")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  ownedTrucks    Truck[]         @relation("TruckOwner")
-  truckOperators TruckOperator[]
-  reviews        Review[]
-  reviewPhotos   ReviewPhoto[]
-  photoLikes     PhotoLike[]
+  ownedTrucks      Truck[]         @relation("TruckOwner")
+  truckOperators   TruckOperator[]
+  reviews          Review[]
+  reviewPhotos     ReviewPhoto[]
+  photoLikes       PhotoLike[]
+  moderatedReviews Review[]        @relation("ReviewModerator")
 
   @@map("users")
 }
@@ -191,17 +192,21 @@ model MenuItem {
 /// isVisible lets admins hide abusive content without deleting it.
 /// rating must be 1-5 — enforced at the application layer (Prisma has no CHECK support).
 model Review {
-  id        String   @id @default(uuid())
-  truckId   String   @map("truck_id")
-  userId    String   @map("user_id")
-  rating    Int // 1-5; validated in API before write
-  body      String?
-  isVisible Boolean  @default(true) @map("is_visible")
-  createdAt DateTime @default(now()) @map("created_at")
+  id                String    @id @default(uuid())
+  truckId           String    @map("truck_id")
+  userId            String    @map("user_id")
+  rating            Int // 1-5; validated in API before write
+  body              String?
+  isVisible         Boolean   @default(true) @map("is_visible")
+  moderationNote    String?   @map("moderation_note") // reason for the most recent hide/unhide
+  moderatedByUserId String?   @map("moderated_by_user_id")
+  moderatedAt       DateTime? @map("moderated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
 
-  truck  Truck         @relation(fields: [truckId], references: [id])
-  user   User          @relation(fields: [userId], references: [id])
-  photos ReviewPhoto[]
+  truck     Truck         @relation(fields: [truckId], references: [id])
+  user      User          @relation(fields: [userId], references: [id])
+  moderator User?         @relation("ReviewModerator", fields: [moderatedByUserId], references: [id])
+  photos    ReviewPhoto[]
 
   @@unique([truckId, userId])
   @@map("reviews")

@@ -3,12 +3,7 @@ import { notFound } from 'next/navigation'
 import { getTruckBySlug } from '@/lib/trucks'
 import { getTodaysScheduleEntries } from '@/lib/schedule'
 import { getCurrentUser } from '@/lib/auth'
-import {
-  canModerateReviews,
-  getOwnReview,
-  getReviewSummary,
-  getVisibleReviewsForTruck,
-} from '@/lib/reviews'
+import { getOwnReview, getReviewSummary, getVisibleReviewsForTruck } from '@/lib/reviews'
 import { TruckMenu } from '@/components/truck-menu'
 import { TruckReviews } from '@/components/truck-reviews'
 
@@ -111,7 +106,6 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
         reviews={reviews}
         summary={reviewSummary}
         ownReview={ownReview}
-        isAdmin={canModerateReviews(currentUser?.role)}
       />
     </main>
   )

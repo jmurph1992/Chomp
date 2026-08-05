@@ -3,19 +3,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const getCurrentUser = vi.fn()
 const upsertReview = vi.fn()
 const deleteReview = vi.fn()
-const setReviewVisibility = vi.fn()
-const canModerateReviews = vi.fn()
 const revalidatePath = vi.fn()
 const checkRateLimit = vi.fn()
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/rate-limit', () => ({ checkRateLimit, reviewLimiter: {} }))
-vi.mock('@/lib/reviews', () => ({ upsertReview, deleteReview, setReviewVisibility, canModerateReviews }))
+vi.mock('@/lib/reviews', () => ({ upsertReview, deleteReview }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 
-const { submitReviewAction, deleteReviewAction, setReviewVisibilityAction } = await import(
-  './reviews'
-)
+const { submitReviewAction, deleteReviewAction } = await import('./reviews')
 
 describe('submitReviewAction', () => {
   beforeEach(() => {
@@ -74,41 +70,5 @@ describe('deleteReviewAction', () => {
     getCurrentUser.mockResolvedValue({ id: 'u1', role: 'customer' })
     await deleteReviewAction('t1', 'taco-kings')
     expect(deleteReview).toHaveBeenCalledWith('t1', 'u1')
-  })
-})
-
-describe('setReviewVisibilityAction', () => {
-  beforeEach(() => {
-    getCurrentUser.mockReset()
-    setReviewVisibility.mockReset()
-    canModerateReviews.mockReset()
-    revalidatePath.mockReset()
-  })
-
-  it('rejects when signed out', async () => {
-    getCurrentUser.mockResolvedValue(null)
-    await expect(setReviewVisibilityAction('r1', 'taco-kings', false)).rejects.toThrow(
-      'Not authorized',
-    )
-    expect(setReviewVisibility).not.toHaveBeenCalled()
-  })
-
-  it('rejects a signed-in non-admin', async () => {
-    getCurrentUser.mockResolvedValue({ id: 'u1', role: 'customer' })
-    canModerateReviews.mockReturnValue(false)
-
-    await expect(setReviewVisibilityAction('r1', 'taco-kings', false)).rejects.toThrow(
-      'Not authorized',
-    )
-    expect(setReviewVisibility).not.toHaveBeenCalled()
-  })
-
-  it('allows an admin to hide a review', async () => {
-    getCurrentUser.mockResolvedValue({ id: 'admin1', role: 'admin' })
-    canModerateReviews.mockReturnValue(true)
-
-    await setReviewVisibilityAction('r1', 'taco-kings', false)
-
-    expect(setReviewVisibility).toHaveBeenCalledWith('r1', false)
   })
 })

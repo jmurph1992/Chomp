@@ -4,19 +4,28 @@ const requireAdmin = vi.fn()
 const verifyTruck = vi.fn()
 const rejectTruck = vi.fn()
 const holdTruck = vi.fn()
+const setReviewVisibility = vi.fn()
 const revalidatePath = vi.fn()
 
 vi.mock('@/lib/admin', () => ({ requireAdmin }))
 vi.mock('@/lib/trucks', () => ({ verifyTruck, rejectTruck, holdTruck }))
+vi.mock('@/lib/reviews', () => ({ setReviewVisibility }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 
-const { verifyTruckAction, rejectTruckAction, holdTruckAction } = await import('./admin')
+const {
+  verifyTruckAction,
+  rejectTruckAction,
+  holdTruckAction,
+  hideReviewAction,
+  unhideReviewAction,
+} = await import('./admin')
 
 beforeEach(() => {
   requireAdmin.mockReset()
   verifyTruck.mockReset()
   rejectTruck.mockReset()
   holdTruck.mockReset()
+  setReviewVisibility.mockReset()
   revalidatePath.mockReset()
 })
 
@@ -64,5 +73,41 @@ describe('holdTruckAction', () => {
     await holdTruckAction('t1', 'taco-kings', 'Health code complaint')
 
     expect(holdTruck).toHaveBeenCalledWith('t1', 'Health code complaint')
+  })
+})
+
+describe('hideReviewAction', () => {
+  it('rejects a non-admin, without writing', async () => {
+    requireAdmin.mockRejectedValue(new Error('Not authorized'))
+    await expect(hideReviewAction('r1', 'taco-kings', 'Spam')).rejects.toThrow('Not authorized')
+    expect(setReviewVisibility).not.toHaveBeenCalled()
+  })
+
+  it('hides the review with the given reason and moderator id, and revalidates', async () => {
+    requireAdmin.mockResolvedValue({ id: 'admin1', role: 'admin' })
+    await hideReviewAction('r1', 'taco-kings', 'Spam')
+
+    expect(setReviewVisibility).toHaveBeenCalledWith('r1', false, 'Spam', 'admin1')
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/reviews')
+    expect(revalidatePath).toHaveBeenCalledWith('/trucks/taco-kings')
+  })
+})
+
+describe('unhideReviewAction', () => {
+  it('rejects a non-admin, without writing', async () => {
+    requireAdmin.mockRejectedValue(new Error('Not authorized'))
+    await expect(unhideReviewAction('r1', 'taco-kings', 'False positive')).rejects.toThrow(
+      'Not authorized',
+    )
+    expect(setReviewVisibility).not.toHaveBeenCalled()
+  })
+
+  it('unhides the review with the given reason and moderator id, and revalidates', async () => {
+    requireAdmin.mockResolvedValue({ id: 'admin1', role: 'admin' })
+    await unhideReviewAction('r1', 'taco-kings', 'False positive')
+
+    expect(setReviewVisibility).toHaveBeenCalledWith('r1', true, 'False positive', 'admin1')
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/reviews')
+    expect(revalidatePath).toHaveBeenCalledWith('/trucks/taco-kings')
   })
 })

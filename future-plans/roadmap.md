@@ -30,9 +30,6 @@ for the first time in the stack, ahead of its other documented uses
 - Truck deletion / ownership transfer (deactivating is the only lever today)
 - R2 bucket lifecycle rule for orphaned/un-finalized uploads (~24h auto-expiry,
   documented, not configured)
-- Feed refresh scheduler — `POST /api/cron/refresh-feed` exists and works,
-  nothing calls it on a timer yet (Vercel Cron or the Inngest job the stack
-  doc already commits to)
 
 ## 4. Compliance before real users
 Account deletion / erasure handling — `user.deleted` webhooks are currently a
@@ -75,14 +72,18 @@ scoping before building):
   fix, not urgent.
 
 ## Operational completeness — prioritized (2026-08-05)
-Next session starts here: review moderation queue first.
+Next session starts here: R2 lifecycle rule first.
 
-1. **Review moderation queue** — admin UI to view/unhide reviews, not just
-   one-way hide. Natural follow-on to the truck-verification admin surface
-   shipped 2026-08-04.
-2. **Feed refresh scheduler** — wire up the existing
-   `POST /api/cron/refresh-feed` to Vercel Cron or Inngest. Small,
-   self-contained, no new product decisions needed.
+1. ~~Review moderation queue~~ — **done 2026-08-05**, see
+   `/docs/features/reviews.md`'s "Moderation queue" section. `/admin/reviews`
+   lists every review across all trucks, filterable, with reason-required
+   hide/unhide and an audit trail (moderator + timestamp).
+2. ~~Feed refresh scheduler~~ — **done 2026-08-05**, see
+   `/docs/features/feed.md`'s "Refresh" section. An Inngest-scheduled
+   function (`refreshFeedFunction`, daily cron) replaced the old
+   `CRON_SECRET`-gated route — first real Inngest usage in the app, verified
+   end-to-end against the local Inngest Dev Server. Still needs an Inngest
+   Cloud app + sync once actually deployed.
 3. **R2 lifecycle rule** — configure the ~24h auto-expiry on the bucket for
    orphaned uploads. Already documented, just needs the Cloudflare-side
    config.

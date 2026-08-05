@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-04
+2026-08-05
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. Both pending migrations are now applied to the Neon dev DB. Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is now seeded (6 trucks, reviews, a liked photo, refreshed feed). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is also done: review submission, truck creation, and upload-slot requests are all limited via a shared Upstash Redis primitive. Truck verification is now also built: new trucks are hidden from the map/public page until an admin approves them via a new `/admin/trucks` queue, and a previously verified truck can be pulled back off the map ("on hold") — see "This session" below. The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. All migrations are applied to the Neon dev DB (7 total, latest adds review moderation audit fields — see "This session" below). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, and upload-slot requests are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is now also built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail). The feed's daily refresh is now automatic too: an Inngest-scheduled function (first real Inngest usage in the app) replaced the old manual `CRON_SECRET` route — verified working end-to-end locally against the Inngest Dev Server and the real Neon dev DB, though production activation still needs an Inngest Cloud app + sync once actually deployed (see "This session" below and Open Item 17). The app is ready to run/deploy against real data.**
 
 ---
 
@@ -29,7 +29,7 @@
 - **Database**: PostgreSQL 18 + PostGIS on Neon (US West 2)
 - **ORM**: Prisma 6 — `$queryRaw` for PostGIS geospatial queries only
 - **Cache**: Redis (location/feed caching — not yet wired up)
-- **Background Jobs**: Inngest (not yet wired up)
+- **Background Jobs**: Inngest (wired up 2026-08-05 — daily feed refresh, see "This session" below)
 - **Auth**: Clerk (not yet wired up)
 - **Email**: Resend (not yet wired up)
 - **Maps**: Mapbox GL JS (not yet wired up)
@@ -148,14 +148,17 @@ pnpm dev
 5. ~~Narrow the Cloudflare R2 API token's scope to `chomp-uploads` only~~ —
    **done 2026-08-04**, see "This session" below.
 6. ~~Seed the dev DB~~ — **done 2026-08-04**, see "This session" below.
-7. **Set `CRON_SECRET`** and point a scheduler at `POST /api/cron/refresh-feed`
-   once deployed — nothing calls it automatically yet (see `/go-live-requirements/feed.md`).
+7. ~~Set `CRON_SECRET` and point a scheduler at the feed refresh~~ — **done
+   differently, 2026-08-05**: replaced with an Inngest-scheduled function
+   instead of a Vercel-Cron-style route; see "This session" below and
+   `/docs/features/feed.md`. Still needs an Inngest Cloud app + sync once
+   actually deployed — see item 17 below.
 8. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
    no-op (see `/docs/features/auth.md` and `/go-live-requirements/auth.md`). Needs a
    real decision before launch.
 9. ~~Review submission rate limiting~~ — **done 2026-08-04**, see "This session"
-   below. **Real moderation queue** still deliberately deferred, see
-   `/go-live-requirements/reviews.md`.
+   below. ~~Real moderation queue~~ — **done 2026-08-05**, see "This session"
+   below and `/go-live-requirements/reviews.md`.
 10. ~~Operator dashboard truck-creation rate limiting~~ — **done 2026-08-04**.
     Manager-invite flow and truck deletion/ownership transfer still open, see
     `/go-live-requirements/operator-dashboard.md`.
@@ -172,6 +175,151 @@ pnpm dev
 14. **Operator notification on verification decisions** — deliberately
     deferred (no Resend integration yet to hang it off of), see
     `/docs/features/truck-verification.md`'s "Deliberately deferred" section.
+15. ~~Review moderation queue~~ — **done 2026-08-05**, see "This session"
+    below and `/docs/features/reviews.md`'s "Moderation queue" section.
+16. ~~Feed refresh scheduler~~ — **done 2026-08-05** (code-complete), see
+    "This session (2026-08-05, feed refresh scheduler)" below and
+    `/docs/features/feed.md`.
+17. **Sync the Inngest app once deployed** — the daily feed-refresh function
+    only runs locally right now (via the Inngest Dev Server). Production
+    activation needs: deploy to Vercel, create an Inngest Cloud app, set real
+    `INNGEST_EVENT_KEY`/`INNGEST_SIGNING_KEY` in Vercel's env vars (not
+    `INNGEST_DEV`), and sync the deployed `/api/inngest` URL with Inngest
+    Cloud.
+18. **Next up (per `future-plans/roadmap.md`'s prioritized list)**: the R2
+    lifecycle rule, then manager-invite flow, then truck deletion/ownership
+    transfer.
+
+## This session (2026-08-05, feed refresh scheduler)
+- **Closed roadmap item 2 ("Feed refresh scheduler")** — see
+  `/docs/features/feed.md`'s "Refresh" section and `future-plans/roadmap.md`
+  for the updated punch list. First real use of Inngest in the app (was
+  listed as "not yet wired up").
+- **Chose Inngest over Vercel Cron**, at the user's explicit direction —
+  matches `stack.md`'s long-term background-jobs decision, even though it
+  meant standing up a whole new service for what's currently a single
+  scheduled job (Vercel Cron would have been zero-new-infra, but only sends
+  `GET` where the old route was `POST`-only, and Hobby-plan cron is capped at
+  once/day anyway).
+- **New**: `apps/web/inngest/client.ts` (the `Inngest` client, `id: 'chomp'`),
+  `apps/web/inngest/functions.ts` (`refreshFeedHandler` — a plain async
+  function calling `refreshFeedView()` via `step.run`, exported separately
+  from `refreshFeedFunction` so it's unit-testable without Inngest's own test
+  runtime; `refreshFeedFunction` — `cron: '0 0 * * *'`, daily UTC),
+  `apps/web/app/api/inngest/route.ts` (thin `serve()` wrapper).
+- **Removed** (per the user's explicit "Inngest-only" choice): the old
+  `POST /api/cron/refresh-feed` route and its test, `CRON_SECRET` from
+  `.env.example`. `/api/cron(.*)` dropped from `middleware.ts`'s public
+  allowlist; `/api/inngest(.*)` added instead (Inngest verifies every request
+  itself via its signing key, same self-authenticating pattern as the Clerk
+  webhook route).
+- **Real Inngest credentials**: the user provided a real production
+  `INNGEST_SIGNING_KEY` and `INNGEST_EVENT_KEY` mid-session (pasted directly
+  in chat) — put straight into `apps/web/.env.local` only (confirmed
+  gitignored before writing), never echoed back in full afterward, never
+  written to `.env.example`. Since a real prod signing key makes the Inngest
+  SDK default to `mode: "cloud"` (signature-verified) regardless of
+  `NODE_ENV`, added `INNGEST_DEV=1` to `.env.local` to force local dev mode
+  (skips signature verification, talks to the local Dev Server) as agreed
+  with the user — unset that when actually deploying.
+- **Verified for real, not just mocked**: ran `next dev` alongside
+  `npx inngest-cli@latest dev -u http://localhost:3000/api/inngest`.
+  Confirmed the function registered (`GET /api/inngest` → `200`,
+  `mode: "dev"`, `function_count: 1`; Dev Server's GraphQL API listed
+  `Refresh feed materialized view`), then manually invoked it through the Dev
+  Server's GraphQL mutation and confirmed the app log showed the real
+  `REFRESH MATERIALIZED VIEW CONCURRENTLY feed_items` query executing against
+  the actual Neon dev DB. Both dev processes stopped cleanly afterward.
+- **Tests**: new `apps/web/inngest/functions.test.ts` (`refreshFeedHandler`
+  runs `refreshFeedView` inside a named step; `refreshFeedFunction` registers
+  with the expected id and daily cron trigger via a mocked `inngest` client).
+  Deleted the old cron route's test. Net test count unchanged (194/194
+  passing — 3 removed, 3 added). Full `pnpm type-check` across all 4
+  packages: clean. Ran a real `pnpm build` twice (once per feature this
+  session) per the standing lesson that `tsc`/vitest can't catch
+  client-bundle bugs — both times `next build`/`next dev` auto-mutated
+  `apps/web/tsconfig.json` as a side effect (same behavior `next lint`
+  has, already documented below); reverted with `git checkout` each time so
+  it doesn't show up in the diff.
+- **Docs updated**: `/docs/features/feed.md` (new Inngest-based "Refresh"
+  section, local-dev instructions, updated Testing/Setup checklist; also
+  fixed unrelated stale "photo half will be empty" scope-cut left over from
+  before photo upload shipped 2026-08-04), `/go-live-requirements/feed.md`
+  (marked done, noted prod activation still needs a deploy + Inngest Cloud
+  sync), `/docs/architecture/stack.md` (Background Jobs row).
+- **Not yet done / next session**: none of this session's changes are
+  committed to git yet — left as unstaged for review. Production activation
+  (Open Item 17 above) can't happen until the app is actually deployed to
+  Vercel, which hasn't happened yet in any session so far. Next up per the
+  roadmap: the R2 lifecycle rule (item 3).
+
+## This session (2026-08-05, review moderation queue)
+- **Closed roadmap item 1 ("Review moderation queue")** — see
+  `/docs/features/reviews.md`'s "Moderation queue" section and
+  `future-plans/roadmap.md` for the updated punch list.
+- **Migration `20260805194319_add_review_moderation_audit`**, applied to the
+  Neon dev DB after showing the user the exact generated SQL and getting
+  explicit approval (per `CLAUDE.md`'s migration rule): adds three nullable
+  columns to `reviews` — `moderation_note`, `moderated_by_user_id` (FK →
+  `users.id`, `ON DELETE SET NULL`), `moderated_at`. No backfill needed (all
+  existing reviews get nulls). `prisma migrate dev --create-only` generated
+  the SQL so it could be reviewed before applying, same two-step pattern as
+  prior migration sessions.
+- **`setReviewVisibility` (`apps/web/lib/reviews.ts`) now requires a reason**
+  in both directions (hide and unhide) — the user explicitly chose "require
+  reason on both" over the truck-verification precedent of only requiring one
+  on reject/hold. Throws before touching the DB if the reason is blank; on
+  success stores the reason plus the acting admin's id and a fresh timestamp,
+  overwriting whatever the previous moderation action left. New
+  `getAllReviewsForAdmin()` returns every review across every truck (truck
+  name/slug, reviewer, rating, body, visibility, moderation note/by/at) for
+  the queue.
+- **New admin surface**: `/admin/reviews`
+  (`apps/web/app/admin/reviews/page.tsx` +
+  `apps/web/components/admin/review-queue.tsx`), modeled directly on the
+  existing `/admin/trucks` queue — All/Hidden/Visible filter chips, and the
+  same inline reason-input UX (text field + Confirm/Cancel, Confirm disabled
+  until non-empty) as the truck queue's reject/hold flow. New
+  `hideReviewAction`/`unhideReviewAction` in `apps/web/app/actions/admin.ts`,
+  `requireAdmin()`-gated, revalidating `/admin/reviews` and the truck's public
+  page.
+- **Consolidated moderation onto one surface, at the user's explicit
+  direction**: removed the old one-click "Hide (admin)" button that lived
+  inline on the truck detail page (`components/truck-reviews.tsx`) along with
+  its `isAdmin` prop and the now-fully-unused `canModerateReviews` permission
+  helper (deleted from `lib/reviews.ts` — `requireAdmin()` already covers the
+  same check for the new actions). A bare inline button couldn't collect a
+  required reason without adding a second modal component, so `/admin/reviews`
+  is now the only place hide/unhide happens.
+- **Admin nav bar** added to `apps/web/app/admin/layout.tsx` (Trucks /
+  Reviews links) — plain `Link`s, no active-state highlighting, matching the
+  existing style of the dashboard's `/dashboard/[truckId]` nav rather than
+  introducing a new pattern.
+- **Tests**: extended `lib/reviews.test.ts` (new `setReviewVisibility`
+  signature's reason validation and audit-field writes, `getAllReviewsForAdmin`
+  mapping, removed the now-deleted `canModerateReviews` test) and
+  `app/actions/admin.test.ts` (auth + reason-passing for the two new
+  actions, alongside the existing truck verification action tests); trimmed
+  `app/actions/reviews.test.ts` for the removed `setReviewVisibilityAction`.
+  Full `pnpm --filter @chomp/web test`: 194/194 passing. Full
+  `pnpm type-check` across all 4 packages: clean. Also ran a real
+  `pnpm build` (not just `tsc`/vitest) given the prior session's lesson about
+  client-bundle bugs `tsc`/vitest can't catch — compiled clean, `/admin/reviews`
+  shows up as its own route in the build output. **Note**: `next build`
+  auto-reformatted/added a few keys to `apps/web/tsconfig.json` as a side
+  effect (same "reconfigures your tsconfig" behavior `next lint` does,
+  already documented below in "Testing infra") — reverted that unrelated
+  change with `git checkout` before finishing, so it doesn't show up in the
+  diff for this feature.
+- **Docs updated**: `/docs/features/reviews.md` (new "Moderation queue"
+  section, updated data-layer/security/testing notes),
+  `/go-live-requirements/reviews.md` (marked done),
+  `/docs/architecture/schema.md` (added the three new `reviews` columns),
+  `future-plans/roadmap.md` (marked item 1 done, moved feed refresh scheduler
+  to the top of what's next).
+- **Not yet done / next session**: none of this session's changes are
+  committed to git yet — left as unstaged for review, same pattern as prior
+  sessions. Next up per the roadmap: feed refresh scheduler (item 2).
 
 ## This session (2026-08-04, truck verification)
 - **Closed the "how do we prevent fake truck accounts" gap** — see
@@ -568,6 +716,7 @@ pnpm dev
 | `20260731120000_add_feed_items_unique_index` | Unique index on `feed_items.item_id`, required for `REFRESH MATERIALIZED VIEW CONCURRENTLY` | Yes (applied 2026-08-03) |
 | `20260803120000_add_review_photo_visibility` | Adds `review_photos.is_visible`; rebuilds `feed_items` to filter the photo side by it too | Yes (applied 2026-08-03) |
 | `20260804140000_add_truck_verification_status` | Replaces `trucks.is_verified` (boolean) with `verification_status` (enum: pending/verified/rejected/onHold) + `verification_note`; backfills `is_verified = true` → `verified` | Yes (applied 2026-08-04) |
+| `20260805194319_add_review_moderation_audit` | Adds `reviews.moderation_note`, `moderated_by_user_id` (FK → `users.id`), `moderated_at` — no backfill | Yes (applied 2026-08-05) |
 
 ---
 
@@ -590,7 +739,7 @@ pnpm dev
   `next dev`/`next build` — a copy at the repo root is silently ignored.
 - The Prisma client is generated into `node_modules` — run `pnpm db:generate` after any schema changes.
 - PostGIS `geography(Point, 4326)` columns use `Unsupported()` in Prisma — all geospatial queries (`ST_DWithin`, `ST_Distance`) must use `prisma.$queryRaw`.
-- The `feed_items` materialized view is refreshed via `POST /api/cron/refresh-feed` (manual/cron-triggered, `CRON_SECRET`-gated) — no automatic scheduling yet, real Inngest-based refresh is still a follow-up. Never compute the feed inline from the base tables.
+- The `feed_items` materialized view is refreshed daily by `apps/web/inngest/functions.ts#refreshFeedFunction` (Inngest cron trigger) — production activation still needs an Inngest Cloud app + sync once deployed, see Open Item 17. Never compute the feed inline from the base tables.
 - `CREATE EXTENSION IF NOT EXISTS postgis;` is included at the top of the `init` migration — any fresh DB will get PostGIS automatically.
 - Node 24.15.0 is required. Managed via asdf (`.tool-versions` in home dir) and nvm (`.nvmrc` in project root).
 - When running `prisma migrate` from Claude Code, Prisma requires explicit user consent via `PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION` env var for destructive operations (`reset`, `drop`).

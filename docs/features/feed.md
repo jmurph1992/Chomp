@@ -22,45 +22,67 @@ auto-update as reviews/photos change.
   `CONCURRENTLY` requires the unique index added in migration
   `20260731120000_add_feed_items_unique_index` — applied to the Neon dev DB as
   of 2026-08-03. A fresh database still needs `pnpm db:migrate` run against it
-  before the refresh route will work; it isn't applied automatically.
-- `POST /api/cron/refresh-feed` calls it, gated by a `CRON_SECRET` bearer
-  token (not a Clerk session — added to the middleware's public allowlist for
-  the same reason as the Clerk webhook route: it authenticates itself a
-  different way). Nothing calls this automatically yet; point a scheduler
-  (Vercel Cron, or eventually Inngest per `stack.md`'s "refreshed by a
-  background job" decision) at it once deployed.
+  before the refresh function will work; it isn't applied automatically.
+- `apps/web/inngest/functions.ts#refreshFeedFunction` calls it once a day
+  (`cron: '0 0 * * *'`, UTC), registered through `apps/web/app/api/inngest/route.ts`
+  (Inngest's own `serve()` handler). That route is public in
+  `middleware.ts` — not a Clerk-session bypass, since Inngest verifies every
+  request itself via `INNGEST_SIGNING_KEY`, the same self-authenticating
+  pattern as the Clerk webhook route. This replaced an earlier
+  `POST /api/cron/refresh-feed` route (`CRON_SECRET`-gated, meant to be
+  pointed at by Vercel Cron) — removed once Inngest took over scheduling, per
+  `future-plans/roadmap.md`'s prioritized list.
 - `packages/db/prisma/seed.ts` runs a **plain** (non-`CONCURRENTLY`) refresh
-  at the end of seeding, so the feed has data immediately without needing the
-  cron route — and works whether or not the unique-index migration has been
-  applied yet, since plain refresh doesn't need it.
+  at the end of seeding, so the feed has data immediately without waiting for
+  the daily Inngest run — and works whether or not the unique-index migration
+  has been applied yet, since plain refresh doesn't need it.
+
+### Local dev
+
+Run the Inngest Dev Server alongside `next dev` so the function registers and
+can be triggered on demand, without needing real Inngest Cloud credentials:
+
+```bash
+npx inngest-cli@latest dev -u http://localhost:3000/api/inngest
+```
+
+`INNGEST_DEV=1` in `apps/web/.env.local` forces the SDK into dev mode (skips
+signature verification, talks to the local Dev Server) even with real
+`INNGEST_EVENT_KEY`/`INNGEST_SIGNING_KEY` values present — unset it once
+actually deploying. The Dev Server's UI (`http://localhost:8288`) lets you
+manually invoke `refresh-feed` to test without waiting for the daily cron.
 
 ## Scope cuts (not built this pass)
 
-- **No automatic scheduling.** The refresh route exists; nothing calls it on
-  a timer. Tracked in `/go-live-requirements/feed.md`.
-- **The photo half will be empty for a while.** There's no photo upload or
-  like flow yet (`ReviewPhoto`/`PhotoLike` have no write path). The view
-  already `UNION ALL`s both sources, so once that's built, photos will start
-  appearing here with no changes to this feature.
 - **No infinite scroll** — plain Previous/Next links.
 
 ## Testing
 
 - Unit: `apps/web/lib/feed.test.ts` (`parsePageParam` validation, pagination
   math and `hasMore` derivation with Prisma mocked, `refreshFeedView`),
-  `apps/web/app/api/cron/refresh-feed/route.test.ts` (missing/wrong secret
-  rejected before refreshing, mirroring the Clerk webhook route's test
-  pattern).
+  `apps/web/inngest/functions.test.ts` (`refreshFeedHandler` runs
+  `refreshFeedView` inside a named step; `refreshFeedFunction` registers with
+  the expected id and daily cron trigger).
 - E2e (`apps/web/e2e/feed.spec.ts`, gated on `DATABASE_URL` + seeded +
   refreshed data): a qualifying review renders and links to its truck; a
   **high-rated but hidden** seeded review never renders — deliberately
   high-rated so the test actually proves the view's `is_visible` filter is
   doing something, not just its `rating >= 4` filter.
+- Manual/real: verified end-to-end against the actual Neon dev DB by running
+  `next dev` alongside `npx inngest-cli@latest dev -u
+  http://localhost:3000/api/inngest`, confirming the function registered
+  (Dev Server's GraphQL API listed it), and manually invoking it — the app
+  log showed the real `REFRESH MATERIALIZED VIEW CONCURRENTLY feed_items`
+  query executing.
 
 ## Setup checklist
 
 1. Apply the `feed_items_item_id_key` migration (`pnpm db:migrate`).
-2. Set `CRON_SECRET` in `.env.local`.
-3. Point a scheduler at `POST /api/cron/refresh-feed` with
-   `Authorization: Bearer <CRON_SECRET>` (or just re-run `pnpm db:seed`
-   locally, which refreshes as its last step).
+2. Local dev: run `npx inngest-cli@latest dev -u
+   http://localhost:3000/api/inngest` alongside `next dev` (or just re-run
+   `pnpm db:seed` locally, which refreshes as its last step, without needing
+   Inngest running at all).
+3. Production: create an Inngest Cloud app, set real `INNGEST_EVENT_KEY`/
+   `INNGEST_SIGNING_KEY` in the deployment's env vars (not `INNGEST_DEV`),
+   and sync the deployed `/api/inngest` URL with Inngest Cloud so the daily
+   cron trigger actually fires.

@@ -5,11 +5,7 @@ import Image from 'next/image'
 import { SignedIn, SignedOut, SignInButton } from '@clerk/nextjs'
 import type { ReviewPhotoView, ReviewSummary, ReviewView } from '@chomp/types'
 import { isValidRating } from '@chomp/utils'
-import {
-  deleteReviewAction,
-  setReviewVisibilityAction,
-  submitReviewAction,
-} from '@/app/actions/reviews'
+import { deleteReviewAction, submitReviewAction } from '@/app/actions/reviews'
 import {
   attachReviewPhotoAction,
   deleteReviewPhotoAction,
@@ -25,10 +21,9 @@ type Props = {
   reviews: ReviewView[]
   summary: ReviewSummary
   ownReview: ReviewView | null
-  isAdmin: boolean
 }
 
-export function TruckReviews({ truckId, slug, reviews, summary, ownReview, isAdmin }: Props) {
+export function TruckReviews({ truckId, slug, reviews, summary, ownReview }: Props) {
   return (
     <section className="mt-6">
       <h2 className="text-xl font-semibold">Reviews</h2>
@@ -72,7 +67,6 @@ export function TruckReviews({ truckId, slug, reviews, summary, ownReview, isAdm
                 <PhotoLikeButton truckId={truckId} slug={slug} photo={review.photo} />
               </div>
             )}
-            {isAdmin && <HideReviewButton reviewId={review.id} slug={slug} />}
           </li>
         ))}
       </ul>
@@ -315,24 +309,5 @@ function ReviewPhotoSection({
       {busy && <p className="text-sm text-gray-500">Saving photo…</p>}
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
-  )
-}
-
-function HideReviewButton({ reviewId, slug }: { reviewId: string; slug: string }) {
-  const [isPending, startTransition] = useTransition()
-
-  return (
-    <button
-      type="button"
-      disabled={isPending}
-      onClick={() =>
-        startTransition(async () => {
-          await setReviewVisibilityAction(reviewId, slug, false)
-        })
-      }
-      className="mt-1 text-xs text-red-600 disabled:opacity-50"
-    >
-      Hide (admin)
-    </button>
   )
 }

@@ -140,14 +140,20 @@ menu_items (
 ```sql
 -- One review per user per truck (enforced by UNIQUE constraint).
 -- is_visible allows admins to hide abusive reviews without deleting them.
+-- moderation_note/moderated_by_user_id/moderated_at record the reason and
+-- who/when for the most recent hide or unhide — see docs/features/reviews.md's
+-- "Moderation queue" section.
 reviews (
-  id              uuid PRIMARY KEY,
-  truck_id        uuid REFERENCES trucks(id),
-  user_id         uuid REFERENCES users(id),
-  rating          int CHECK (rating BETWEEN 1 AND 5),
-  body            text,
-  is_visible      boolean DEFAULT true,
-  created_at      timestamptz DEFAULT now(),
+  id                    uuid PRIMARY KEY,
+  truck_id              uuid REFERENCES trucks(id),
+  user_id               uuid REFERENCES users(id),
+  rating                int CHECK (rating BETWEEN 1 AND 5),
+  body                  text,
+  is_visible            boolean DEFAULT true,
+  moderation_note       text,
+  moderated_by_user_id  uuid REFERENCES users(id),
+  moderated_at          timestamptz,
+  created_at            timestamptz DEFAULT now(),
   UNIQUE (truck_id, user_id)
 )
 
@@ -221,11 +227,8 @@ CREATE INDEX ON feed_items (truck_id, created_at DESC);
 CREATE UNIQUE INDEX feed_items_item_id_key ON feed_items (item_id);
 ```
 
-Refreshing is currently manual: `POST /api/cron/refresh-feed` (gated by
-`CRON_SECRET`) runs the `CONCURRENTLY` refresh; nothing calls it automatically
-yet — a scheduler (Vercel Cron, or eventually Inngest per the "Refreshed by a
-background job" note above) needs to be pointed at it. See
-`/docs/features/feed.md`.
+Refreshing runs the `CONCURRENTLY` refresh once a day via an Inngest-scheduled
+function (`refreshFeedFunction`, cron trigger). See `/docs/features/feed.md`.
 
 ---
 

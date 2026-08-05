@@ -1,15 +1,10 @@
 import { db } from '@chomp/db'
 import { isValidRating } from '@chomp/utils'
-import type { ReviewSummary, ReviewView } from '@chomp/types'
+import type { AdminReviewView, ReviewSummary, ReviewView } from '@chomp/types'
 import { deleteReviewPhoto } from './review-photos'
 import { isValidReviewBody } from './review-validation'
 
 export { MAX_REVIEW_BODY_LENGTH, isValidReviewBody } from './review-validation'
-
-/** Only an admin may hide/unhide another user's review. */
-export function canModerateReviews(role: string | null | undefined): boolean {
-  return role === 'admin'
-}
 
 type ReviewRow = {
   id: string
@@ -134,6 +129,56 @@ export async function deleteReview(truckId: string, userId: string): Promise<voi
   await db.review.deleteMany({ where: { truckId, userId } })
 }
 
-export async function setReviewVisibility(reviewId: string, isVisible: boolean): Promise<void> {
-  await db.review.update({ where: { id: reviewId }, data: { isVisible } })
+/**
+ * The moderation primitive. A reason is always required, in either direction —
+ * it's stored as the review's moderation note along with who made the change
+ * and when, overwriting whatever the previous moderation action left behind.
+ * No permission check inside it; the caller (the server action) is
+ * responsible for calling `requireAdmin()` first.
+ */
+export async function setReviewVisibility(
+  reviewId: string,
+  isVisible: boolean,
+  reason: string,
+  moderatorUserId: string,
+): Promise<void> {
+  if (!reason.trim()) throw new Error('A moderation reason is required')
+
+  await db.review.update({
+    where: { id: reviewId },
+    data: {
+      isVisible,
+      moderationNote: reason,
+      moderatedByUserId: moderatorUserId,
+      moderatedAt: new Date(),
+    },
+  })
+}
+
+/** Every review across all trucks, for the admin moderation queue. */
+export async function getAllReviewsForAdmin(): Promise<AdminReviewView[]> {
+  const rows = await db.review.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: {
+      truck: { select: { slug: true, name: true } },
+      user: { select: { displayName: true, email: true } },
+      moderator: { select: { email: true } },
+    },
+  })
+
+  return rows.map((row) => ({
+    id: row.id,
+    truckId: row.truckId,
+    truckSlug: row.truck.slug,
+    truckName: row.truck.name,
+    userDisplayName: row.user.displayName,
+    userEmail: row.user.email,
+    rating: row.rating,
+    body: row.body,
+    isVisible: row.isVisible,
+    moderationNote: row.moderationNote,
+    moderatedByEmail: row.moderator?.email ?? null,
+    moderatedAt: row.moderatedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  }))
 }

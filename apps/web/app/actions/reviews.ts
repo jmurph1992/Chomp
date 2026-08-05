@@ -3,12 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { getCurrentUser } from '@/lib/auth'
 import { checkRateLimit, reviewLimiter } from '@/lib/rate-limit'
-import {
-  canModerateReviews,
-  deleteReview,
-  setReviewVisibility,
-  upsertReview,
-} from '@/lib/reviews'
+import { deleteReview, upsertReview } from '@/lib/reviews'
 
 export async function submitReviewAction(
   truckId: string,
@@ -29,19 +24,5 @@ export async function deleteReviewAction(truckId: string, slug: string): Promise
   if (!user) throw new Error('Sign in to manage your review')
 
   await deleteReview(truckId, user.id)
-  revalidatePath(`/trucks/${slug}`)
-}
-
-export async function setReviewVisibilityAction(
-  reviewId: string,
-  slug: string,
-  isVisible: boolean,
-): Promise<void> {
-  const user = await getCurrentUser()
-  if (!user || !canModerateReviews(user.role)) {
-    throw new Error('Not authorized to moderate reviews')
-  }
-
-  await setReviewVisibility(reviewId, isVisible)
   revalidatePath(`/trucks/${slug}`)
 }

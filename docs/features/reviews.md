@@ -17,9 +17,15 @@ enforced by the existing `@@unique([truckId, userId])` on `Review`.
   anything other than the acting user's own review.
 - `upsertReview` / `deleteReview` — keyed on `truckId_userId`, so resubmitting
   updates in place rather than erroring on the unique constraint.
-- `setReviewVisibility(reviewId, isVisible)` — the moderation primitive. No
+- `setReviewVisibility(reviewId, isVisible, reason, moderatorUserId)` — the
+  moderation primitive. A non-empty `reason` is required in either direction;
+  it's stored as `moderationNote` along with `moderatedByUserId` and
+  `moderatedAt`, overwriting whatever the previous moderation action left. No
   permission check inside it; the caller (the server action) is responsible
-  for checking `canModerateReviews(role)` first.
+  for calling `requireAdmin()` first.
+- `getAllReviewsForAdmin()` — every review across every truck (truck name/
+  slug, reviewer, rating, body, visibility, moderation note/by/at), for the
+  `/admin/reviews` queue.
 
 ## Ownership & moderation (security)
 
@@ -27,10 +33,12 @@ enforced by the existing `@@unique([truckId, userId])` on `Review`.
   user from the Clerk session server-side (`getCurrentUser()`) and scopes the
   DB write to that user's id. The client only ever sends `truckId`/`rating`/
   `body`/`reviewId` — never a user id, and never a role.
-- `setReviewVisibilityAction` additionally requires `canModerateReviews(role)`
-  (i.e. `role === 'admin'`) on the server-resolved user before calling
-  `setReviewVisibility`. A non-admin (or signed-out) caller is rejected before
-  anything is touched.
+- Moderation (`hideReviewAction`/`unhideReviewAction`,
+  `apps/web/app/actions/admin.ts`) requires `requireAdmin()` on the
+  server-resolved user before calling `setReviewVisibility`. A non-admin (or
+  signed-out) caller is rejected before anything is touched. Both actions
+  require a non-empty reason from the client, re-validated server-side inside
+  `setReviewVisibility`.
 - Rating is validated with `isValidRating` (`packages/utils`, already used
   elsewhere); review body has a server-side max length
   (`MAX_REVIEW_BODY_LENGTH`, `apps/web/lib/reviews.ts`). Client-side validation
@@ -47,14 +55,23 @@ any attached photo (and its likes) first, since `review_photos.review_id` is
 `ON DELETE RESTRICT` — deleting a review with a photo still attached would
 otherwise fail on the FK constraint.
 
+## Moderation queue
+
+`/admin/reviews` (`role === 'admin'`, gated by `apps/web/lib/admin.ts#requireAdmin()`
+at both the `/admin` layout and independently inside `hideReviewAction`/
+`unhideReviewAction`) lists every review across every truck via
+`getAllReviewsForAdmin()`, filterable by All/Hidden/Visible
+(`apps/web/components/admin/review-queue.tsx`). Hiding and unhiding both
+require a typed reason (same inline reason-input pattern as the truck
+verification queue's reject/hold), stored on the review as `moderationNote` +
+`moderatedByUserId` + `moderatedAt`. This replaced an earlier one-click
+"Hide (admin)" button that lived inline on the truck detail page — that
+button is gone; all moderation now happens through this one queue, since a
+one-click button can't collect a required reason without adding a second
+modal component.
+
 ## Scope cuts (not built this pass)
 
-- **Moderation is one-way from this page.** An admin can hide a review (it
-  then disappears from the visible list, per `getVisibleReviewsForTruck`'s
-  filter), but there's no unhide UI here — once hidden, restoring it requires
-  going around this page (Prisma Studio, or a future admin dashboard with a
-  real moderation queue). This was a deliberate "minimal admin action" scope
-  cut, not an oversight.
 - **No rate limiting.** Nothing stops a signed-in user from submitting review
   updates repeatedly — tracked in `/go-live-requirements/reviews.md`.
 - **No restriction on reviewing your own truck.** Not enforced by the schema
@@ -63,10 +80,13 @@ otherwise fail on the FK constraint.
 ## Testing
 
 - Unit: `apps/web/lib/reviews.test.ts` (all query/mutation functions, Prisma
-  mocked; validation helpers; the `canModerateReviews` permission check;
-  photo mapping including the viewer's like state) and
-  `apps/web/app/actions/reviews.test.ts` (auth/ownership/admin rejection paths,
-  mirroring the webhook route's test pattern).
+  mocked; validation helpers; photo mapping including the viewer's like
+  state; `setReviewVisibility`'s reason requirement and audit-field writes;
+  `getAllReviewsForAdmin`'s mapping), `apps/web/app/actions/reviews.test.ts`
+  (auth/ownership rejection paths, mirroring the webhook route's test
+  pattern), and `apps/web/app/actions/admin.test.ts` (auth + reason-passing
+  for `hideReviewAction`/`unhideReviewAction`, alongside the truck
+  verification action tests).
 - E2e (`apps/web/e2e/truck-detail.spec.ts`, gated on `DATABASE_URL` + seed
   data): visible reviews and average rating render, a hidden seeded review
   never renders, a signed-out visitor sees the sign-in prompt instead of

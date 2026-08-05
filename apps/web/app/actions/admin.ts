@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/admin'
+import { setReviewVisibility } from '@/lib/reviews'
 import { holdTruck, rejectTruck, verifyTruck } from '@/lib/trucks'
 
 // slug is only needed to revalidate the now-stale public page/map data —
@@ -29,4 +30,18 @@ export async function holdTruckAction(truckId: string, slug: string, reason: str
   revalidatePath('/admin/trucks')
   revalidatePath(`/trucks/${slug}`)
   revalidatePath('/')
+}
+
+export async function hideReviewAction(reviewId: string, slug: string, reason: string): Promise<void> {
+  const admin = await requireAdmin()
+  await setReviewVisibility(reviewId, false, reason, admin.id)
+  revalidatePath('/admin/reviews')
+  revalidatePath(`/trucks/${slug}`)
+}
+
+export async function unhideReviewAction(reviewId: string, slug: string, reason: string): Promise<void> {
+  const admin = await requireAdmin()
+  await setReviewVisibility(reviewId, true, reason, admin.id)
+  revalidatePath('/admin/reviews')
+  revalidatePath(`/trucks/${slug}`)
 }
