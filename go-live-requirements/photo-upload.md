@@ -1,11 +1,10 @@
 # Photo Upload — go-live requirements
 
-- **R2 lifecycle rule not yet configured.** A client that requests an upload
-  slot, uploads to R2, and never calls the finalize action leaves an orphaned
-  object with no app-level code path that ever cleans it up. Needs an R2
-  bucket lifecycle rule (Cloudflare dashboard) auto-expiring objects older
-  than ~24h. Documented in `.env.example` and `/docs/features/photo-upload.md`,
-  but not actually configured anywhere yet.
+- ~~R2 lifecycle rule not yet configured~~ — **done 2026-08-07**. `chomp-uploads`
+  has an `expire-orphaned-uploads` rule (prefix `uploads/`, delete after 1
+  day, enabled) configured in the Cloudflare dashboard, covering a client
+  that requests an upload slot, uploads to R2, and never calls finalize. See
+  `/docs/features/photo-upload.md`'s Setup checklist.
 - ~~No rate limiting on upload-slot requests~~ — **done**, see
   `/docs/features/rate-limiting.md`. `requestUploadSlotAction` is limited to
   20/hour per user via Upstash Redis — tighter relative to normal use than

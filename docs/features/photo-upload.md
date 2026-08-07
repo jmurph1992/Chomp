@@ -46,10 +46,16 @@ directly for the actual bytes, then tell the server once it's done.
      intake buffer only, never the long-term store. Deletes it on ingest
      *failure* too, so nothing lingers either way.
 
-**Known gap**: if a client uploads to R2 via the presigned slot but never
-calls finalize at all (closes the tab, network drops), that object has no
-code path that ever cleans it up — the R2 lifecycle-rule note in
-`.env.example` covers this (an infrastructure config, not app code).
+If a client uploads to R2 via the presigned slot but never calls finalize at
+all (closes the tab, network drops), that object has no *app* code path that
+ever cleans it up — instead, an R2 bucket lifecycle rule on `chomp-uploads`
+(`expire-orphaned-uploads`, prefix `uploads/`, delete after 1 day, configured
+directly in the Cloudflare dashboard 2026-08-07) auto-expires it. This can't
+be managed via the app's own R2 credentials — they're deliberately scoped to
+object read/write only, not bucket administration (confirmed: both
+`PutBucketLifecycleConfiguration` and its `Get` equivalent return `403` with
+those credentials) — so it's dashboard-only, verified by reading the
+Lifecycle Rules tab back rather than via API.
 
 ## Two shapes of client usage
 
@@ -122,8 +128,8 @@ code path that ever cleans it up — the R2 lifecycle-rule note in
 ## Setup checklist
 
 1. Create an R2 bucket, set `CLOUDFLARE_R2_*` in `.env.local`, and add a
-   bucket lifecycle rule to auto-expire objects older than ~24h (see the
-   known gap above).
+   bucket lifecycle rule to auto-expire objects older than ~24h (done for
+   `chomp-uploads`, see above).
 2. Create a Cloudflare Images API token, set `CLOUDFLARE_API_TOKEN` and
    `CLOUDFLARE_IMAGES_ACCOUNT_HASH`.
 3. Apply the `20260803120000_add_review_photo_visibility` migration

@@ -99,6 +99,41 @@ export type OperatedTruck = {
   role: 'owner' | 'manager'
 }
 
+export type InviteStatusValue = 'pending' | 'accepted' | 'cancelled' | 'expired'
+
+/**
+ * A pending/resolved manager invite as shown on the dashboard's team page.
+ * Includes the token (needed for the "Copy link" action on any row, not just
+ * a freshly-created one) — safe here because this view is only ever rendered
+ * on the owner-gated /team page, never anywhere an unauthenticated visitor or
+ * non-owner operator could see it.
+ */
+export type TruckInviteView = {
+  id: string
+  invitedEmail: string
+  token: string
+  status: InviteStatusValue
+  createdAt: string
+  expiresAt: string
+}
+
+/** A current manager on a truck's team page (owner isn't shown through this list). */
+export type TruckManagerView = {
+  userId: string
+  email: string
+  displayName: string | null
+}
+
+/**
+ * Unauthenticated-safe preview for the invite-claim landing page — never
+ * includes invitedEmail, so a leaked link can't be used to see who was invited.
+ */
+export type InvitePreview = {
+  truckName: string
+  status: InviteStatusValue
+  expiresAt: string
+}
+
 /** Input for creating a new truck (fields the operator supplies). */
 export type CreateTruckInput = {
   name: string

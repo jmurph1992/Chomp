@@ -26,6 +26,12 @@ export const uploadSlotLimiter = new Ratelimit({
   prefix: 'ratelimit:upload-slot',
 })
 
+export const inviteLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, '1 h'),
+  prefix: 'ratelimit:invite',
+})
+
 /**
  * Throws on limit exceeded rather than returning a boolean — call sites
  * already use throw-on-reject for auth checks (see requireOperator), so this

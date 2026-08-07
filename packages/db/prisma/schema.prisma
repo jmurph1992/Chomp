@@ -37,6 +37,16 @@ enum VerificationStatus {
   onHold
 }
 
+/// pending: created, link not yet used. accepted: claimed, TruckOperator row created.
+/// cancelled: owner revoked before it was claimed. expired: past expiresAt, written lazily
+/// on the next claim attempt against a stale row rather than via a scheduled sweep.
+enum InviteStatus {
+  pending
+  accepted
+  cancelled
+  expired
+}
+
 // ─── Users ───────────────────────────────────────────────────────────────────
 
 /// Mirrors Clerk users into the DB for relational data.
@@ -56,6 +66,8 @@ model User {
   reviewPhotos     ReviewPhoto[]
   photoLikes       PhotoLike[]
   moderatedReviews Review[]        @relation("ReviewModerator")
+  sentInvites      TruckInvite[]   @relation("InviteCreatedBy")
+  acceptedInvites  TruckInvite[]   @relation("InviteAcceptedBy")
 
   @@map("users")
 }
@@ -82,6 +94,7 @@ model Truck {
 
   owner          User            @relation("TruckOwner", fields: [ownerId], references: [id])
   operators      TruckOperator[]
+  invites        TruckInvite[]
   locations      TruckLocation[]
   schedules      TruckSchedule[]
   menuCategories MenuCategory[]
@@ -104,6 +117,30 @@ model TruckOperator {
 
   @@id([truckId, userId])
   @@map("truck_operators")
+}
+
+/// A pending offer to become a manager on a truck, delivered as a shareable link
+/// (no email sending) — invitedEmail is checked against the Clerk-authenticated
+/// claimant's email at claim time, never used to send mail. invitedEmail is stored
+/// lowercased so the claim-time comparison is a plain equality check.
+model TruckInvite {
+  id               String       @id @default(uuid())
+  truckId          String       @map("truck_id")
+  invitedEmail     String       @map("invited_email")
+  token            String       @unique
+  status           InviteStatus @default(pending)
+  createdByUserId  String       @map("created_by_user_id")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  expiresAt        DateTime     @map("expires_at")
+  acceptedAt       DateTime?    @map("accepted_at")
+  acceptedByUserId String?      @map("accepted_by_user_id")
+
+  truck          Truck @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  createdBy      User  @relation("InviteCreatedBy", fields: [createdByUserId], references: [id])
+  acceptedByUser User? @relation("InviteAcceptedBy", fields: [acceptedByUserId], references: [id])
+
+  @@index([truckId, status])
+  @@map("truck_invites")
 }
 
 // ─── Location ─────────────────────────────────────────────────────────────────

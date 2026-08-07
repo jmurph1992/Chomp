@@ -25,11 +25,10 @@ for the first time in the stack, ahead of its other documented uses
 ## 3. Operational completeness
 - Review moderation queue (admins can only one-way hide from the truck page
   today; no way to view/unhide without Prisma Studio)
-- Manager-invite flow (`TruckOperator(role: manager)` is fully functional in
-  the schema/permissions, but nothing creates that row — no UI)
+- ~~Manager-invite flow~~ — done 2026-08-07, see the prioritized list below
 - Truck deletion / ownership transfer (deactivating is the only lever today)
-- R2 bucket lifecycle rule for orphaned/un-finalized uploads (~24h auto-expiry,
-  documented, not configured)
+- ~~R2 bucket lifecycle rule for orphaned/un-finalized uploads~~ — done
+  2026-08-07, see the prioritized list below
 
 ## 4. Compliance before real users
 Account deletion / erasure handling — `user.deleted` webhooks are currently a
@@ -84,12 +83,23 @@ Next session starts here: R2 lifecycle rule first.
    `CRON_SECRET`-gated route — first real Inngest usage in the app, verified
    end-to-end against the local Inngest Dev Server. Still needs an Inngest
    Cloud app + sync once actually deployed.
-3. **R2 lifecycle rule** — configure the ~24h auto-expiry on the bucket for
-   orphaned uploads. Already documented, just needs the Cloudflare-side
-   config.
-4. **Manager-invite flow** — build the UI/action to create
-   `TruckOperator(role: manager)` rows. Needs a product decision on invite
-   mechanics (email invite? link? who can revoke?) before implementation.
+3. ~~R2 lifecycle rule~~ — **done 2026-08-07**. `chomp-uploads` now has an
+   `expire-orphaned-uploads` rule (prefix `uploads/`, delete after 1 day,
+   enabled), configured directly in the Cloudflare dashboard — the scoped R2
+   app-runtime credentials in `.env.local` can't manage bucket lifecycle
+   config at all (confirmed `403 AccessDenied` on both
+   `PutBucketLifecycleConfiguration` and the `Get` equivalent), so this had
+   to be a manual dashboard change, verified by reading the dashboard's
+   Lifecycle Rules tab back rather than via API. While there, found and
+   removed an unrelated pre-existing bucket-wide rule ("Get outta here",
+   no prefix, delete-after-1-day) that neither Claude nor initially the user
+   recognized — user later confirmed they'd created it themselves under
+   unrelated circumstances and it's not a concern.
+4. ~~Manager-invite flow~~ — **done 2026-08-07**, see
+   `/docs/features/manager-invites.md`. Shareable, email-gated link
+   (no Resend — that stays deliberately unwired until it has its own natural
+   trigger), 7-day expiry, owner-only, with cancel-pending and
+   remove-existing-manager both built in the same pass.
 5. **Truck deletion / ownership transfer** — highest-risk item: touches data
    retention, reviews/photos cascade behavior, and ownership handoff. Needs
    the most product decision-making up front.

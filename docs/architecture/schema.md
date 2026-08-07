@@ -55,6 +55,25 @@ truck_operators (
   role            text DEFAULT 'owner',   -- 'owner' | 'manager'
   PRIMARY KEY (truck_id, user_id)
 )
+
+-- A pending offer to become a manager on a truck, delivered as a shareable link
+-- (no email sending) — invited_email is checked against the Clerk-authenticated
+-- claimant's email at claim time, never used to send mail. See
+-- docs/features/manager-invites.md.
+truck_invites (
+  id                    uuid PRIMARY KEY,
+  truck_id              uuid REFERENCES trucks(id) ON DELETE CASCADE,
+  invited_email         text NOT NULL,          -- stored lowercased
+  token                 text UNIQUE NOT NULL,   -- opaque randomUUID(), the claim link's secret
+  status                text DEFAULT 'pending', -- 'pending' | 'accepted' | 'cancelled' | 'expired'
+  created_by_user_id    uuid REFERENCES users(id),
+  created_at            timestamptz DEFAULT now(),
+  expires_at            timestamptz NOT NULL,   -- 7 days after creation
+  accepted_at           timestamptz,
+  accepted_by_user_id   uuid REFERENCES users(id)
+)
+
+CREATE INDEX ON truck_invites (truck_id, status);
 ```
 
 ---
@@ -260,6 +279,7 @@ users
  │    ├── truck_schedules
  │    ├── menu_categories → menu_items
  │    ├── truck_events
+ │    ├── truck_invites (owner-created, claimed by another user)
  │    └── reviews → review_photos → photo_likes
  └── reviews, review_photos, photo_likes (as customer)
 ```

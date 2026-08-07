@@ -9,10 +9,10 @@
   an admin can also pull a previously verified truck back off the map
   ("on hold") if it turns out to be fraudulent later. This is a *visibility*
   lever, not a deletion one — see the next item, still open.
-- **No manager-invite flow.** `TruckOperator(role: manager)` is fully
-  functional (full permission parity with owner) but nothing in the product
-  creates that row — an owner can't add a manager. Needs its own UI before
-  "manager" is a real feature rather than a schema capability.
+- ~~No manager-invite flow~~ — **done 2026-08-07**, see
+  `/docs/features/manager-invites.md`. An owner can invite a manager by
+  shareable, email-gated link; cancel a pending invite; or remove an existing
+  manager.
 - **No way to delete a truck** or transfer ownership. Deactivating
   (`isActive: false`) is the only operator-facing way to take a truck down.
 - **Image upload.** Logo, cover, and menu-item photos are all pasted-URL only,

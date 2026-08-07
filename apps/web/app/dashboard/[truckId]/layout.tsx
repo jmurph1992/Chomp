@@ -52,6 +52,9 @@ export default async function TruckDashboardLayout({
         <Link href={`/dashboard/${truckId}/location`} className="pb-2">
           Location
         </Link>
+        <Link href={`/dashboard/${truckId}/team`} className="pb-2">
+          Team
+        </Link>
       </nav>
 
       <div className="mt-6">{children}</div>

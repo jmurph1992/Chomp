@@ -26,8 +26,8 @@ out: `/`, `/trucks/*`, `/feed/*`, the auth pages themselves, and the webhook end
 
 ## Roles
 
-Every new user starts as `customer`. There are exactly two places `User.role` is
-ever written server-side — never from a client-supplied value:
+Every new user starts as `customer`. There are exactly three places `User.role`
+is ever written server-side — never from a client-supplied value:
 
 1. The Clerk webhook handler (`apps/web/lib/clerk-webhook.ts`), which always writes
    `customer` on `user.created` and never changes `role` on `user.updated`.
@@ -35,6 +35,9 @@ ever written server-side — never from a client-supplied value:
    "create your truck" flow (`docs/features/operator-dashboard.md`) — creating a
    truck makes the caller its owner and upgrades a `customer` to `operator`. It
    never downgrades an existing `operator` or `admin`.
+3. `apps/web/lib/invites.ts#claimInvite`, called when someone accepts a
+   manager invite (`docs/features/manager-invites.md`) — same upgrade,
+   same never-downgrades rule.
 
 `admin` is not self-service anywhere — it's set out-of-band (Prisma Studio/direct
 DB access), same as `verificationStatus` on trucks (see

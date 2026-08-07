@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-05
+2026-08-07
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard, and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. All migrations are applied to the Neon dev DB (7 total, latest adds review moderation audit fields — see "This session" below). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, and upload-slot requests are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is now also built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail). The feed's daily refresh is now automatic too: an Inngest-scheduled function (first real Inngest usage in the app) replaced the old manual `CRON_SECRET` route — verified working end-to-end locally against the Inngest Dev Server and the real Neon dev DB, though production activation still needs an Inngest Cloud app + sync once actually deployed (see "This session" below and Open Item 17). The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard (now including manager invites), and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. All migrations are applied to the Neon dev DB (8 total, latest adds the `truck_invites` table — see "This session" below). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and now invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail). The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites are now built too: an owner can add a manager via a shareable, email-gated link (`/dashboard/[truckId]/team`), cancel a pending invite, or remove an existing manager — see "This session" below. The app is ready to run/deploy against real data.**
 
 ---
 
@@ -160,10 +160,11 @@ pnpm dev
    below. ~~Real moderation queue~~ — **done 2026-08-05**, see "This session"
    below and `/go-live-requirements/reviews.md`.
 10. ~~Operator dashboard truck-creation rate limiting~~ — **done 2026-08-04**.
-    Manager-invite flow and truck deletion/ownership transfer still open, see
+    ~~Manager-invite flow~~ — **done 2026-08-07**, see "This session" below.
+    Truck deletion/ownership transfer still open, see
     `/go-live-requirements/operator-dashboard.md`.
-11. ~~Photo upload upload-slot rate limiting~~ — **done 2026-08-04**. R2
-    lifecycle rule still not actually configured (just documented), see
+11. ~~Photo upload upload-slot rate limiting~~ — **done 2026-08-04**. ~~R2
+    lifecycle rule~~ — **done 2026-08-07**, see "This session" below and
     `/go-live-requirements/photo-upload.md`.
 12. **Feature development after this** — every major feature in the original
     product scope now has at least a first pass built. What's left is mostly
@@ -186,9 +187,120 @@ pnpm dev
     `INNGEST_EVENT_KEY`/`INNGEST_SIGNING_KEY` in Vercel's env vars (not
     `INNGEST_DEV`), and sync the deployed `/api/inngest` URL with Inngest
     Cloud.
-18. **Next up (per `future-plans/roadmap.md`'s prioritized list)**: the R2
-    lifecycle rule, then manager-invite flow, then truck deletion/ownership
-    transfer.
+18. **Next up (per `future-plans/roadmap.md`'s prioritized list)**: with the
+    R2 lifecycle rule and manager-invite flow both done, only truck
+    deletion/ownership transfer remains on that list — highest-risk item,
+    needs real product decisions on data retention and cascade behavior
+    before implementation.
+
+## This session (2026-08-07, manager-invite flow)
+- **Closed roadmap item 4 ("Manager-invite flow")** — see
+  `/docs/features/manager-invites.md` and `future-plans/roadmap.md` for the
+  updated punch list.
+- **Product decisions locked in with the user before building** (per
+  `CLAUDE.md`'s "ask questions first" rule): shareable link only, no Resend
+  (deliberately kept unwired until it has its own natural trigger);
+  email-gated (claimant's Clerk email must match the invited email); owner-only
+  (managers can't invite peers); 7-day expiry; owner can cancel a pending
+  invite and remove an existing manager (there was previously no removal path
+  for `TruckOperator` rows at all, short of Prisma Studio).
+- **Migration `20260807164758_add_truck_invites`**, applied to the Neon dev DB
+  after showing the user the exact generated SQL and getting explicit
+  approval (per `CLAUDE.md`'s migration rule): new `InviteStatus` enum
+  (pending/accepted/cancelled/expired) and `truck_invites` table
+  (`truck_id` cascades on delete, `created_by_user_id`/`accepted_by_user_id`
+  don't — matches how `Truck.owner`/`TruckOperator.user` are already left
+  un-cascaded).
+- **New `apps/web/lib/invites.ts`**: `createInvite` (reuses a live pending
+  invite for the same truck+email instead of duplicating; rejects an email
+  already on the team), `claimInvite` (pre-checks — not found, wrong status,
+  expired, email mismatch — run as plain reads/writes; only the actual grant,
+  `TruckOperator` creation + marking the invite accepted + a `User.role`
+  upgrade, is wrapped in `db.$transaction`), `cancelInvite`/`removeManager`
+  (both scoped by id **and** `truckId` via `updateMany`/`deleteMany` +
+  `count === 1`, the same IDOR-prevention idiom as `lib/menu.ts`/`lib/schedule.ts`),
+  `getInvitePreview` (unauthenticated-safe read that withholds `invitedEmail`).
+  `removeManager` has an explicit "owner can't remove themselves" guard plus a
+  belt-and-suspenders `role: 'manager'` scope on the delete itself.
+- **Caught during self-review before finishing**: the first draft of
+  `claimInvite` didn't upgrade a claiming `customer`'s `User.role` to
+  `operator` the way `lib/trucks.ts#createTruck` already does on truck
+  creation — nothing currently *reads* `User.role` for dashboard gating (that's
+  all `TruckOperator` rows via `requireOperator`), but leaving it stale would
+  have been a real data-consistency gap against an established precedent.
+  Fixed — `claimInvite` is now documented as the third legitimate writer of
+  `User.role` (`docs/features/auth.md`), same never-downgrades-existing-
+  operator/admin rule as `createTruck`.
+- **New owner-only guard pattern** (`app/actions/invites.ts`) — the first
+  place in the app that needed "must specifically be the owner, not just any
+  operator": `requireOperator` then an explicit `role !== 'owner'` check.
+- **New UI**: `/dashboard/[truckId]/team` (invite form, pending-invites list
+  with copy-link/cancel, current-managers list with remove — inline
+  `useState`-mode-flag + `useTransition` confirm pattern, matching
+  `truck-queue.tsx`/`review-queue.tsx` rather than extracting a new shared
+  component) and `/invite/[token]` (public landing page — signed-out visitors
+  see a sign-up/sign-in prompt with the email withheld, signed-in visitors get
+  an explicit "Accept invite" button, not an auto-fire, so a stale/forwarded
+  link can't silently enroll someone).
+- **First post-auth redirect wiring in the app**: `sign-in`/`sign-up` pages
+  now read a `redirect_url` query param and pass it to Clerk's
+  `fallbackRedirectUrl`. **Added `lib/redirect.ts#safeRedirectPath`** to
+  sanitize it first — only same-origin relative paths are accepted, rejecting
+  absolute and protocol-relative (`//evil.com`) URLs that would otherwise turn
+  this into an open redirect. `middleware.ts`'s public-route allowlist gained
+  `/invite(.*)` so the landing page renders before auth; the claim action
+  itself still independently requires a session.
+- **New `inviteLimiter`** (`lib/rate-limit.ts`, 10/hour per owner) — applied
+  only to invite creation, same reasoning pattern as the other three limiters.
+- **New `NEXT_PUBLIC_APP_URL` env var** (`.env.example`) — the invite-creation
+  action builds the shareable link server-side from this trusted value
+  (falls back to `http://localhost:3000` if unset), never from client input.
+- **Tests**: new `lib/invites.test.ts` (26 tests), `app/actions/invites.test.ts`
+  (11 tests), `lib/redirect.test.ts` (5 tests), `e2e/invite.spec.ts`. Full
+  `pnpm --filter @chomp/web test`: 236/236 passing. Full `pnpm type-check`
+  across all packages: clean (caught one real issue —
+  `exactOptionalPropertyTypes` rejected passing an explicit `undefined` to
+  Clerk's `fallbackRedirectUrl` prop; fixed by having `safeRedirectPath`
+  return `null` instead, which the prop's type actually allows). Ran a real
+  `pnpm build` per the standing lesson that `tsc`/vitest can't catch
+  client-bundle bugs — compiled clean, `/dashboard/[truckId]/team` and
+  `/invite/[token]` both show up as their own routes; reverted the incidental
+  `tsconfig.json` mutation `next build` causes, same as every prior session.
+- **Not yet done / next session**: none of this session's changes are
+  committed to git yet — left as unstaged for review, same pattern as prior
+  sessions. Only roadmap item 5 (truck deletion/ownership transfer) remains
+  on the "Operational completeness" list — needs real product decisions on
+  data retention and reviews/photos cascade behavior before it can even be
+  planned.
+
+## This session (2026-08-07, R2 lifecycle rule)
+- **Closed roadmap item 3 ("R2 bucket lifecycle rule")** — see
+  `/docs/features/photo-upload.md` and `future-plans/roadmap.md` for the
+  updated punch list.
+- **Couldn't be done via API**: the app's own `CLOUDFLARE_R2_*` credentials
+  are deliberately scoped to object read/write only on `chomp-uploads` (from
+  the 2026-08-04 least-privilege session) — confirmed with real API calls
+  that both `PutBucketLifecycleConfiguration` and its `Get` equivalent return
+  `403 AccessDenied` with those credentials. The general `CLOUDFLARE_API_TOKEN`
+  can't help either — scoped to Images only, no R2 access at all. Lifecycle
+  management needs a broader R2 "Admin" permission tier that no existing
+  app credential has, by design.
+- **Configured manually in the Cloudflare dashboard** instead: `chomp-uploads`
+  now has an `expire-orphaned-uploads` rule — prefix `uploads/` (matches the
+  only key pattern `lib/storage.ts` ever writes), delete after 1 day, enabled.
+  Verified by having the user read the dashboard's Lifecycle Rules tab back
+  (API verification wasn't possible for the same permission reason as above).
+- **Found and removed an unrelated pre-existing rule**: "Get outta here",
+  no prefix (bucket-wide), delete-after-1-day, enabled — neither Claude nor
+  initially the user recognized it. Flagged as possibly-suspicious (an
+  unexplained bucket-wide deletion rule with an unusual name) before the user
+  confirmed they'd created it themselves under unrelated circumstances and
+  deleted it. Worth knowing if it resurfaces: it was bucket-wide with no
+  prefix filter, so it would have deleted anything placed outside `uploads/`
+  too, though nothing in the app ever writes there.
+- **No app code changed** — this was a pure infra/dashboard change. Docs
+  updated: `/docs/features/photo-upload.md`, `/go-live-requirements/photo-upload.md`,
+  `future-plans/roadmap.md`, `.env.example`.
 
 ## This session (2026-08-05, feed refresh scheduler)
 - **Closed roadmap item 2 ("Feed refresh scheduler")** — see
@@ -717,6 +829,7 @@ pnpm dev
 | `20260803120000_add_review_photo_visibility` | Adds `review_photos.is_visible`; rebuilds `feed_items` to filter the photo side by it too | Yes (applied 2026-08-03) |
 | `20260804140000_add_truck_verification_status` | Replaces `trucks.is_verified` (boolean) with `verification_status` (enum: pending/verified/rejected/onHold) + `verification_note`; backfills `is_verified = true` → `verified` | Yes (applied 2026-08-04) |
 | `20260805194319_add_review_moderation_audit` | Adds `reviews.moderation_note`, `moderated_by_user_id` (FK → `users.id`), `moderated_at` — no backfill | Yes (applied 2026-08-05) |
+| `20260807164758_add_truck_invites` | New `InviteStatus` enum + `truck_invites` table (token, status, expiry, creator/acceptor FKs) — no backfill | Yes (applied 2026-08-07) |
 
 ---
 

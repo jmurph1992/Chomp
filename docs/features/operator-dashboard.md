@@ -36,10 +36,10 @@ action re-checks from scratch. Page-level checks and action-level checks are
 both load-bearing, not redundant.
 
 **Manager parity**: any `TruckOperator` row — `owner` or `manager` — passes
-`requireOperator` equally. Nothing in this pass lets an owner actually *add* a
-manager, though; that role is schema-supported and the permission check
-already honors it, but there's no invite UI. A manager row only exists if
-someone puts it there directly (seed script, Prisma Studio).
+`requireOperator` equally. An owner can now actually add a manager via the
+invite flow (`/dashboard/[truckId]/team`) — see
+`/docs/features/manager-invites.md` — which is the only product-facing path
+that creates a `manager` row (besides the seed script and Prisma Studio).
 
 ## Closing an IDOR gap in the menu/schedule CRUD
 
@@ -80,8 +80,8 @@ Component can't do) if the user operates more than one truck.
 
 ## Scope cuts (not built this pass)
 
-- **No manager-invite flow.** Manager permission parity works once a row
-  exists; nothing creates that row through the product.
+- ~~No manager-invite flow~~ **Resolved**: an owner can invite a manager by
+  shareable link, see `/docs/features/manager-invites.md`.
 - **No drag-to-reorder** for menu categories — new ones append to the end.
 - ~~No image upload~~ **Resolved**: logo/cover and menu item photos now use
   the real upload flow (`ImageUploadField`, `/docs/features/photo-upload.md`)
