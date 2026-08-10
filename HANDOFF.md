@@ -9,7 +9,7 @@
 2026-08-10
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. All migrations are applied to the Neon dev DB (10 total, latest adds cascade/orphan behavior for truck deletion — see "This session" below). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and now excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites: an owner can add a manager via a shareable, email-gated link (`/dashboard/[truckId]/team`), cancel a pending invite, or remove an existing manager. Ownership transfer: an owner can offer ownership to an existing manager, who must explicitly accept before anything changes. **New this session**: truck deletion — an owner can permanently delete their truck from `/dashboard/[truckId]`'s "Danger zone" (type-the-name-to-confirm). Every item on the "operational completeness" roadmap list is now done. Still deliberately not built: a "my reviews" user-profile page (orphaned reviews are DB-only retention for now — see memory `project-my-reviews-page-deferred`), and account deletion/erasure handling (roadmap item 4, a separate compliance question). The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), and a full customer-facing account page (profile + favorites + reviews) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) remains its own separate compliance question — the only intentionally-open item left on the whole roadmap besides mobile-first nav. The app is ready to run/deploy against real data.**
 
 ---
 
@@ -190,10 +190,217 @@ pnpm dev
 18. ~~Truck deletion~~ — **done 2026-08-10**, see "This session (2026-08-10,
     truck deletion)" below. With this, every item on the "operational
     completeness" roadmap list (`future-plans/roadmap.md` item 3) is done.
-    **Next up**: nothing prioritized — the two remaining known gaps are a
-    "my reviews" page (deliberately deferred, tracked in memory
-    `project-my-reviews-page-deferred`, not a go-live blocker) and account
-    deletion/erasure handling (roadmap item 4, its own compliance decision).
+19. ~~Account page, Phase 1 (profile details + reviews)~~ — **done
+    2026-08-10**, see "This session (2026-08-10, account page)" below and
+    `/docs/features/account.md`.
+20. ~~Account page, Phase 2 (favorites)~~ — **done 2026-08-10**, see
+    "This session (2026-08-10, favorites)" below and
+    `/docs/features/account.md#favorites`. With this, the account page's
+    full original vision is built. **Next up**: nothing prioritized — the
+    one remaining known gap is account deletion/erasure handling (roadmap
+    item 4, its own compliance decision, not a go-live blocker on its own).
+    Mobile-first nav (roadmap item 6) is the other open, unscoped item.
+
+## This session (2026-08-10, favorites)
+- **Closed roadmap item 7, Phase 2 ("Account page — favorites")** — see
+  `/docs/features/account.md#favorites` and `future-plans/roadmap.md` for
+  the updated punch list. With this, the account page's full original
+  vision (profile details, favorites, reviews) is built.
+- **Product decisions locked in with the user before building** (per
+  `CLAUDE.md`'s "ask questions first" rule): **private only** — no public
+  favorite count anywhere, a personal save list, not a popularity signal
+  (unlike photo likes' `likesCount`); **the map is in scope** — a favorite
+  toggle on the map's truck popups, not just the truck detail page, despite
+  popups being raw DOM rather than React; a signed-out visitor sees **no
+  favorite button at all** (matches `PhotoLikeButton`'s pattern, not the
+  review form's "sign in to..." prompt). Confirmed both trucks and
+  individual menu items should be favoritable independently (saving a dish
+  doesn't require favoriting the whole truck).
+- **Migration `20260810223526_add_favorites`**, applied to the Neon dev DB
+  after showing the user the exact generated SQL and getting explicit
+  approval (per `CLAUDE.md`'s migration rule): two new tables,
+  `truck_favorites` and `menu_item_favorites`, both composite-PK join
+  tables like `PhotoLike`/`TruckOperator` — but **unlike `PhotoLike`, both
+  FKs on both new tables cascade** (`truckId`/`menuItemId`, and `userId`).
+  Deliberate deviation, documented in the schema comments: a favorite has
+  zero preserve-for-record-keeping value once its truck/item is gone (unlike
+  a review), same reasoning that justified `onDelete: Cascade` on
+  `TruckOperator`/`TruckLocation`/etc. in the truck-deletion migration two
+  sessions ago. The `user`-side cascade is inert today (`user.deleted` is
+  still a no-op) but is the correct FK for whenever that gets built.
+- **New `apps/web/lib/favorites.ts`**: `favoriteTruck`/`unfavoriteTruck`,
+  `favoriteMenuItem`/`unfavoriteMenuItem` (scoped by `truckId` too, same
+  IDOR-prevention idiom as `lib/menu.ts` — a `menuItemId` that doesn't
+  belong to `truckId` is rejected before the upsert), `getFavoriteTrucksForUser`/
+  `getFavoriteMenuItemsForUser`. Uses `upsert` with an empty `update: {}`
+  for idempotent toggling — simpler than `likePhoto`'s create-and-catch-P2002
+  pattern, since there's no denormalized counter to keep in sync (that's
+  specifically why photo likes need a transaction; favorites don't touch a
+  count at all, per the private-only answer).
+- **Threaded `isFavorited` into existing reads**, same pattern
+  `ReviewPhoto.isLikedByViewer` already uses: `lib/trucks.ts#getTruckBySlug`
+  and `#getNearbyTrucks` both gained an optional `viewerId` param.
+  `getNearbyTrucks`'s raw `$queryRaw` (PostGIS) got a
+  `LEFT JOIN truck_favorites tf ON tf.truck_id = t.id AND tf.user_id =
+  ${viewerId ?? null}` — an anonymous request's `null` never matches
+  (standard SQL three-valued logic), so every truck's `isFavorited` comes
+  back `false` rather than needing a separate code path. Two call sites
+  updated to resolve `getCurrentUser()` and pass the id through:
+  `app/page.tsx` (initial server render) and `getNearbyTrucksAction`
+  (`app/actions/trucks.ts`, the client's geolocation re-fetch).
+- **A real type-modeling snag, caught by `pnpm type-check`, not guessed
+  around**: `MenuItemView`/`MenuCategoryView` turned out to be shared
+  between two different consumers — the public truck page
+  (`getTruckBySlug`) and the operator dashboard's own menu editor
+  (`lib/menu.ts#getMenuForEdit`), which has no viewer/favoriting concept at
+  all. Making `isFavorited` a required field broke the dashboard editor's
+  existing tests/types. Fixed by making it optional
+  (`isFavorited?: boolean`) rather than splitting the shared type — the
+  dashboard editor simply never sets or reads it; only the public path does,
+  always to a real boolean.
+- **Matched an existing pattern instead of inventing a new one**: the first
+  draft of `TruckFavoriteButton` used local optimistic `useState`. Caught
+  during self-review that `PhotoLikeButton` (`components/truck-reviews.tsx`)
+  has *no* local state at all — it relies entirely on `revalidatePath` +
+  the server component re-rendering with a fresh prop after the action's
+  round-trip. Rewrote `TruckFavoriteButton` and the new
+  `MenuItemFavoriteButton` (inside `truck-menu.tsx`) to match that exact
+  pattern instead, which meant `favoriteTruckAction`/etc. needed a `slug`
+  param too (to `revalidatePath('/trucks/${slug}')`), same shape as
+  `likePhotoAction(truckId, slug, photoId)`.
+- **The map's popup favorite button is the one genuinely new UI pattern**:
+  Mapbox popups (`components/truck-map.tsx`) are raw DOM
+  (`document.createElement`), not React — there's no revalidate-and-re-render
+  available. `buildFavoriteButton` owns and updates its own
+  `textContent`/`aria-pressed` directly via a closured local variable after
+  each toggle, calling `favoriteTruckAction`/`unfavoriteTruckAction`
+  directly from a plain `addEventListener('click', ...)` (server actions
+  are callable from any client JS, not just React `onClick` — no special
+  plumbing needed). `TruckMap` gained a `viewerSignedIn` boolean prop,
+  resolved once server-side in `app/page.tsx`, since there's no
+  `<SignedIn>` React context available inside a popup to check against.
+- **New UI**: `components/truck-favorite-button.tsx` (truck detail page,
+  `<SignedIn>`-only, no count); a `MenuItemFavoriteButton` colocated inside
+  `truck-menu.tsx` (same pattern, per item); `components/account/my-favorites.tsx`
+  (two sections — Favorite trucks / Favorite menu items — **unlike the
+  reviews section, these rows get an unfavorite button right here**, not
+  confirm-gated, since removing a favorite isn't destructive the way
+  removing a manager or deleting a truck is).
+- **Verified the new 2-hop cascade for real, not just mocked**: a throwaway
+  script (deleted after use, same pattern as prior credential/cascade
+  verification sessions) created a fully-populated test truck against the
+  real Neon dev DB — a favorited truck and a favorited menu item — deleted
+  the truck, and confirmed both `TruckFavorite` and `MenuItemFavorite` rows
+  disappeared (`Truck → MenuItem → MenuItemFavorite`, transitively, since
+  `MenuItem → Truck` already cascades from the truck-deletion session).
+  Cleaned up the script and test rows afterward.
+- **Tests**: new `lib/favorites.test.ts` (9 tests) and
+  `app/actions/favorites.test.ts` (8 tests); extended `lib/trucks.test.ts`
+  for `getTruckBySlug`/`getNearbyTrucks`'s new `viewerId` param and
+  `isFavorited` mapping (including the anonymous-viewer case) and
+  `app/actions/trucks.test.ts` for `getNearbyTrucksAction`'s new
+  `getCurrentUser()` call. Full `pnpm --filter @chomp/web test`: 297/297
+  passing (up from 274). Full `pnpm type-check` across all packages: clean
+  (after the `MenuItemView` fix above). Real `pnpm build`: clean —
+  `/account/[[...rest]]` grew from 2.33kB to 3.55kB (the new favorites
+  section); reverted the incidental `tsconfig.json` mutation, same as every
+  prior session.
+- **Docs updated**: `/docs/features/account.md` (new "Favorites" section,
+  flipped the old "Scope cuts" entry), `/docs/features/map.md` and
+  `/docs/features/truck-detail.md` (new notes on the favorite-button
+  additions), `future-plans/roadmap.md` (Phase 2 marked done). Memory
+  `project-account-favorites-deferred` retired now that its whole purpose
+  (tracking this gap) no longer applies.
+- **Not yet done / next session**: none of this session's changes are
+  committed to git yet — left as unstaged for review, same pattern as prior
+  sessions. Same manual-verification limit as the account-page session
+  immediately before it: no browser extension was connected in this
+  environment, so a full click-through of the map popup's heart button and
+  the truck-detail-page/menu-item buttons wasn't possible — relied on the
+  real `pnpm build` succeeding, the unit tests above, and the real-DB
+  cascade script, flagged the same way rather than skipped silently. A full
+  signed-in manual walkthrough of both this session's and the account-page
+  session's work is still owed whenever a real browser session is
+  available.
+
+## This session (2026-08-10, account page)
+- **Closed roadmap item 7, Phase 1 ("Account page — profile details +
+  reviews")** — see `/docs/features/account.md` and
+  `future-plans/roadmap.md` for the updated punch list.
+- **Product decisions locked in with the user before building** (per
+  `CLAUDE.md`'s "ask questions first" rule): phase it — profile + reviews
+  now, favorites (trucks + individual menu items, both confirmed wanted)
+  deferred to its own follow-up round; profile-detail editing embeds Clerk's
+  own `<UserProfile />` inline rather than custom forms or linking out; the
+  reviews section is read-only, linking back to each truck's own page to
+  edit, rather than duplicating edit/delete UI here.
+- **No migration needed** — the entire feature reuses the existing `Review`/
+  `ReviewPhoto` tables (including the `truckId`-nullable orphaning from the
+  truck-deletion session immediately prior) and Clerk's existing
+  `user.updated` webhook sync. Zero new tables.
+- **New catch-all route** `apps/web/app/account/[[...rest]]/page.tsx` — not
+  a stylistic choice: Clerk's `<UserProfile />` pushes sub-paths for its own
+  internal tabs (account/security/etc.), which need a matching catch-all to
+  resolve, same reason `/sign-in`/`/sign-up` are already catch-alls. Not
+  added to `middleware.ts`'s public allowlist — protected by default, same
+  as `/dashboard`.
+- **New `lib/reviews.ts#getReviewsForUser`**: every review by a user across
+  all trucks, newest first, deliberately **including** orphaned ones
+  (`truck: null` → `truckSlug`/`truckName: null`) — the entire point of the
+  feature, and the opposite of `getAllReviewsForAdmin`'s deliberate
+  exclusion of the same rows. No `isVisible` filter, same reasoning as the
+  existing `getOwnReview`: a user must always see their own review even if a
+  moderator hid it — the returned view carries `isVisible` so the UI can
+  show a "Hidden by moderator" note instead of silently omitting it.
+- **New type `MyReviewView`** (`packages/types`) — deliberately not
+  `ReviewView` (`truckId: string` is non-nullable by design there, for
+  truck-scoped views only) or `AdminReviewView` (excludes orphaned rows on
+  purpose — the opposite of what this page wants).
+- **New `components/account/my-reviews.tsx`** — plain server-rendered list
+  (no client interactivity needed for a read-only view): rating, body,
+  created date, photo thumbnail if present (same `next/image` + `unoptimized`
+  convention as `truck-reviews.tsx`), a "Hidden by moderator" badge when
+  `!isVisible`, and either a link to the truck's page or, for an orphaned
+  review, a plain "{truckName} (deleted)" label with no link.
+- **New header link**: `app/layout.tsx`'s `<SignedIn>` block gets a plain
+  `<Link href="/account">Account</Link>` next to the existing "Dashboard"
+  link — deliberately not a nav-bar overhaul; that's still its own,
+  separately-scoped roadmap item (item 6 in the original numbered list, "App
+  navigation — mobile-first").
+- **Manual verification hit its limit, documented rather than skipped
+  silently**: no Chrome extension was connected in this environment, so a
+  full signed-in walkthrough (write a review, visit `/account`, delete the
+  truck, confirm the review shows as orphaned) wasn't possible — same
+  prerequisite gap already noted for every other Clerk-dependent interactive
+  flow in this project. Did what was actually verifiable: a real `pnpm
+  build` (route compiles, `/account/[[...rest]]` lists as its own route),
+  and a `curl` check against the real dev server confirming `middleware.ts`
+  actually gates the route (`x-clerk-auth-status: signed-out`,
+  `x-clerk-auth-reason: protect-rewrite` on an unauthenticated request —
+  Clerk's dev-instance handshake 404s under plain `curl` since there's no JS
+  to complete it, but the header confirms the middleware intercepted the
+  request rather than serving the page).
+- **Tests**: new `lib/reviews.test.ts` coverage for `getReviewsForUser`
+  (query shape, a normal review with a photo, an orphaned review with null
+  truck fields, an `isVisible: false` review surfaced rather than filtered).
+  Full `pnpm --filter @chomp/web test`: 274/274 passing (up from 270). Full
+  `pnpm type-check` across all packages: clean. Real `pnpm build`: clean;
+  reverted the incidental `tsconfig.json` mutation, same as every prior
+  session.
+- **Docs updated**: new `/docs/features/account.md`, `/docs/README.md`
+  (new table row), `/docs/features/operator-dashboard.md` (updated the
+  truck-deletion section's "no my reviews page" note now that one exists),
+  `future-plans/roadmap.md` (new item 7, Phase 1 done / Phase 2 open).
+  Memory `project-my-reviews-page-deferred` retired and replaced with
+  `project-account-favorites-deferred`, refocused on what's actually still
+  deferred (favorites) now that the page itself is built.
+- **Not yet done / next session**: none of this session's changes are
+  committed to git yet — left as unstaged for review, same pattern as prior
+  sessions. Favorites (Phase 2) is next if picked up — see memory
+  `project-account-favorites-deferred` for the scoping notes already
+  captured (two favoritable entity types, UI touchpoints beyond just
+  `/account`). A full signed-in manual walkthrough of this session's work
+  is still owed whenever a real browser session is available.
 
 ## This session (2026-08-10, truck deletion)
 - **Closed roadmap item 6 ("Truck deletion")** — see
@@ -1021,6 +1228,7 @@ pnpm dev
 | `20260807164758_add_truck_invites` | New `InviteStatus` enum + `truck_invites` table (token, status, expiry, creator/acceptor FKs) — no backfill | Yes (applied 2026-08-07) |
 | `20260810203148_add_truck_pending_owner` | Adds `trucks.pending_owner_id` (FK → `users.id`, `ON DELETE SET NULL`) — no backfill | Yes (applied 2026-08-10) |
 | `20260810210840_truck_deletion_cascades` | `onDelete: Cascade` on `TruckOperator`/`TruckLocation`/`TruckSchedule`/`MenuCategory`/`MenuItem`/`TruckEvent`'s FKs to `Truck`; `reviews.truck_id`/`review_photos.truck_id` made nullable with `ON DELETE SET NULL` — no backfill | Yes (applied 2026-08-10) |
+| `20260810223526_add_favorites` | New `truck_favorites`/`menu_item_favorites` tables (composite PK, both FKs `ON DELETE CASCADE`) — no backfill | Yes (applied 2026-08-10) |
 
 ---
 

@@ -1,6 +1,6 @@
 import { db } from '@chomp/db'
 import { isValidRating } from '@chomp/utils'
-import type { AdminReviewView, ReviewSummary, ReviewView } from '@chomp/types'
+import type { AdminReviewView, MyReviewView, ReviewSummary, ReviewView } from '@chomp/types'
 import { deleteReviewPhoto } from './review-photos'
 import { isValidReviewBody } from './review-validation'
 
@@ -195,5 +195,39 @@ export async function getAllReviewsForAdmin(): Promise<AdminReviewView[]> {
       moderatedAt: row.moderatedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     }]
+  })
+}
+
+/**
+ * Every review written by a user, across all trucks, for their own account
+ * page — the one place an orphaned (truck-deleted) review is ever shown to
+ * anyone. No isVisible filter, same reasoning as getOwnReview: a user must
+ * always see their own review even if a moderator hid it; isVisible is
+ * still included on the returned view so the UI can show a "hidden" note
+ * rather than silently omitting it.
+ */
+export async function getReviewsForUser(userId: string): Promise<MyReviewView[]> {
+  const rows = await db.review.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      truck: { select: { slug: true, name: true } },
+      photos: { take: 1, select: { id: true, url: true, caption: true } },
+    },
+  })
+
+  return rows.map((row) => {
+    const photo = row.photos[0]
+    return {
+      id: row.id,
+      truckId: row.truckId,
+      truckSlug: row.truck?.slug ?? null,
+      truckName: row.truck?.name ?? null,
+      rating: row.rating,
+      body: row.body,
+      isVisible: row.isVisible,
+      createdAt: row.createdAt.toISOString(),
+      photo: photo ? { id: photo.id, url: photo.url, caption: photo.caption } : null,
+    }
   })
 }

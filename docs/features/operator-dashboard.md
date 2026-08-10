@@ -145,16 +145,15 @@ else is a reversible status flip: `isActive`, `verificationStatus`,
   multi-path cascades within one statement).
 - **Reviews and photos are orphaned, not deleted**: `Review.truckId` and
   `ReviewPhoto.truckId` are nullable with `onDelete: SetNull` — customer-
-  authored content survives with `truckId` cleared, invisible everywhere in
-  the product (no query anywhere fetches by a null `truckId`, and
-  `getAllReviewsForAdmin` explicitly excludes them — see
-  `/docs/features/reviews.md`). This is DB-only retention for record-keeping
-  today, not a user-facing feature — a "my reviews" page that would actually
-  surface these to the reviewer is a deliberately separate, later piece of work.
-  `isVisible` is left untouched on orphaned rows — it means "hidden by a
-  moderator for content reasons," a different concept from "truck no longer
-  exists," so a future page can still render the review's real content next
-  to a "truck deleted" state.
+  authored content survives with `truckId` cleared. `getAllReviewsForAdmin`
+  excludes orphaned rows (nothing left to moderate against — see
+  `/docs/features/reviews.md`), but they're no longer invisible everywhere:
+  `/account` (`/docs/features/account.md`) now surfaces a signed-in user's
+  own reviews, orphaned ones included, with a "(deleted)" state instead of a
+  link. `isVisible` is left untouched on orphaned rows — it means "hidden by
+  a moderator for content reasons," a different concept from "truck no
+  longer exists," so the account page can still render the review's real
+  content next to the "truck deleted" state rather than hiding it.
 - **Cloudflare Images cleanup**: every asset URL still attached to the truck
   (logo, cover, every menu item's photo, every review's photo) is gathered
   *before* the delete — the rows holding those URLs won't exist afterward —

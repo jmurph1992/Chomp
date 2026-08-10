@@ -60,15 +60,17 @@ model User {
   avatarUrl   String?  @map("avatar_url")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  ownedTrucks        Truck[]         @relation("TruckOwner")
-  pendingOwnedTrucks Truck[]         @relation("TruckPendingOwner")
+  ownedTrucks        Truck[]            @relation("TruckOwner")
+  pendingOwnedTrucks Truck[]            @relation("TruckPendingOwner")
   truckOperators     TruckOperator[]
   reviews            Review[]
   reviewPhotos       ReviewPhoto[]
   photoLikes         PhotoLike[]
-  moderatedReviews   Review[]        @relation("ReviewModerator")
-  sentInvites        TruckInvite[]   @relation("InviteCreatedBy")
-  acceptedInvites    TruckInvite[]   @relation("InviteAcceptedBy")
+  moderatedReviews   Review[]           @relation("ReviewModerator")
+  sentInvites        TruckInvite[]      @relation("InviteCreatedBy")
+  acceptedInvites    TruckInvite[]      @relation("InviteAcceptedBy")
+  truckFavorites     TruckFavorite[]
+  menuItemFavorites  MenuItemFavorite[]
 
   @@map("users")
 }
@@ -105,6 +107,7 @@ model Truck {
   events         TruckEvent[]
   reviews        Review[]
   reviewPhotos   ReviewPhoto[]
+  favorites      TruckFavorite[]
 
   @@map("trucks")
 }
@@ -220,8 +223,9 @@ model MenuItem {
   dietaryFlags String[] @map("dietary_flags")
   createdAt    DateTime @default(now()) @map("created_at")
 
-  category MenuCategory @relation(fields: [categoryId], references: [id])
-  truck    Truck        @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  category  MenuCategory       @relation(fields: [categoryId], references: [id])
+  truck     Truck              @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  favorites MenuItemFavorite[]
 
   @@map("menu_items")
 }
@@ -285,6 +289,41 @@ model PhotoLike {
 
   @@id([photoId, userId])
   @@map("photo_likes")
+}
+
+// ─── Favorites ──────────────────────────────────────────────────────────────
+//
+// Unlike PhotoLike above, both FKs here cascade — a favorite has no
+// preserve-for-record-keeping value once its truck/menu item is gone (unlike
+// a review), same reasoning that justified onDelete: Cascade on
+// TruckOperator/TruckLocation/etc. Private only — no denormalized count,
+// see docs/features/account.md#favorites.
+
+/// A user's saved truck. Composite PK prevents duplicate favorites.
+model TruckFavorite {
+  truckId   String   @map("truck_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  truck Truck @relation(fields: [truckId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([truckId, userId])
+  @@map("truck_favorites")
+}
+
+/// A user's saved menu item. Independent of TruckFavorite — a user can save a
+/// specific dish without favoriting the truck as a whole.
+model MenuItemFavorite {
+  menuItemId String   @map("menu_item_id")
+  userId     String   @map("user_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([menuItemId, userId])
+  @@map("menu_item_favorites")
 }
 
 // ─── Events ───────────────────────────────────────────────────────────────────

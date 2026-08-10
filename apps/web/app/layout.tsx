@@ -28,6 +28,9 @@ export default function RootLayout({
               <SignInButton mode="modal" />
             </SignedOut>
             <SignedIn>
+              <Link href="/account" className="text-sm underline">
+                Account
+              </Link>
               <Link href="/dashboard" className="text-sm underline">
                 Dashboard
               </Link>

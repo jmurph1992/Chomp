@@ -27,7 +27,8 @@ export async function getNearbyTrucksAction(lat: number, lng: number): Promise<T
   if (!isValidLat(lat) || !isValidLng(lng)) {
     return []
   }
-  return getNearbyTrucks(lat, lng, DEFAULT_RADIUS_METERS)
+  const user = await getCurrentUser()
+  return getNearbyTrucks(lat, lng, DEFAULT_RADIUS_METERS, user?.id)
 }
 
 /**

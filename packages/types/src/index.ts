@@ -38,6 +38,8 @@ export type TruckMapMarker = {
   lat: number
   lng: number
   distanceMeters: number
+  /** Always false for an anonymous (signed-out) request. */
+  isFavorited: boolean
 }
 
 /** A single schedule entry as shown on a truck's detail page. */
@@ -63,6 +65,13 @@ export type MenuItemView = {
   isFeatured: boolean
   isAvailable: boolean
   dietaryFlags: string[]
+  /**
+   * Optional — this type is shared with lib/menu.ts#getMenuForEdit (the
+   * operator dashboard's menu editor), which has no viewer/favoriting
+   * concept. Only lib/trucks.ts#getTruckBySlug (the public truck page) sets
+   * this, always to a real boolean; false for an anonymous visitor.
+   */
+  isFavorited?: boolean
 }
 
 /** A menu category with its (available) items. */
@@ -87,6 +96,8 @@ export type TruckDetail = {
   currentAddress: string | null
   schedule: TruckScheduleEntry[]
   menu: MenuCategoryView[]
+  /** False for an anonymous visitor — see getTruckBySlug's optional viewerId param. */
+  isFavorited: boolean
 }
 
 // ─── Operator dashboard ─────────────────────────────────────────────────────
@@ -279,6 +290,49 @@ export type AdminReviewView = {
   moderatedByEmail: string | null
   moderatedAt: string | null
   createdAt: string
+}
+
+/**
+ * A review as shown on the signed-in user's own account page, across all
+ * trucks. Unlike ReviewView, truckId/truckSlug/truckName are all nullable —
+ * null means the truck was deleted (see
+ * docs/features/operator-dashboard.md#truck-deletion); the review is
+ * orphaned, not gone, and this is the one place it's actually shown to
+ * anyone. photo deliberately omits like-state (likesCount/isLikedByViewer)
+ * from ReviewPhotoView — irrelevant on a read-only list of your own reviews.
+ */
+export type MyReviewView = {
+  id: string
+  truckId: string | null
+  truckSlug: string | null
+  truckName: string | null
+  rating: number
+  body: string | null
+  isVisible: boolean
+  createdAt: string
+  photo: { id: string; url: string; caption: string | null } | null
+}
+
+// ─── Favorites ────────────────────────────────────────────────────────────────
+
+/** A truck the signed-in user has saved, for the account page's "Favorite trucks" list. */
+export type FavoriteTruckView = {
+  truckId: string
+  truckSlug: string
+  truckName: string
+  logoUrl: string | null
+  cuisineType: string[]
+}
+
+/** A menu item the signed-in user has saved, for the account page's "Favorite menu items" list. */
+export type FavoriteMenuItemView = {
+  menuItemId: string
+  truckId: string
+  name: string
+  price: number | null
+  imageUrl: string | null
+  truckSlug: string
+  truckName: string
 }
 
 // ─── Feed ─────────────────────────────────────────────────────────────────────

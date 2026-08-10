@@ -33,6 +33,22 @@ All values are passed as Prisma tagged-template params, never string-concatenate
 Marker click-throughs land on the truck detail page — see
 [`/docs/features/truck-detail.md`](./truck-detail.md).
 
+## Favorites in the popup
+
+Each truck's popup shows a heart favorite-toggle when the viewer is signed
+in — see [`/docs/features/account.md#favorites`](./account.md). `getNearbyTrucks`
+takes an optional `viewerId` and `LEFT JOIN`s `truck_favorites` to compute
+`isFavorited` per truck (`app/page.tsx` for the initial server render,
+`getNearbyTrucksAction` for the client's geolocation re-fetch).
+
+Mapbox popups are raw DOM (`document.createElement`), not React, so the
+favorite button can't rely on the `revalidatePath` + re-render pattern used
+everywhere else (`TruckFavoriteButton`, `PhotoLikeButton`) — it owns and
+updates its own `textContent`/`aria-pressed` directly, via a closured local
+variable, after each toggle (`buildFavoriteButton` in `truck-map.tsx`).
+`TruckMap` takes a `viewerSignedIn` boolean prop, resolved once server-side,
+since there's no `<SignedIn>` React context available inside a popup.
+
 ## Scope cuts (not built this pass)
 
 - No live polling — matches "locations update every ~30 min," data refreshes on

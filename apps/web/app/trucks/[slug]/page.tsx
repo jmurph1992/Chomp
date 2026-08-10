@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/lib/auth'
 import { getOwnReview, getReviewSummary, getVisibleReviewsForTruck } from '@/lib/reviews'
 import { TruckMenu } from '@/components/truck-menu'
 import { TruckReviews } from '@/components/truck-reviews'
+import { TruckFavoriteButton } from '@/components/truck-favorite-button'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -16,12 +17,14 @@ function formatTime(iso: string | null): string | null {
 
 export default async function TruckDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const truck = await getTruckBySlug(slug)
+  // Resolved before getTruckBySlug (not in the Promise.all below) since the
+  // truck query itself needs the viewer's id to compute isFavorited.
+  const currentUser = await getCurrentUser()
+  const truck = await getTruckBySlug(slug, currentUser?.id)
   if (!truck) notFound()
 
   const todaysSchedule = getTodaysScheduleEntries(truck.schedule)
 
-  const currentUser = await getCurrentUser()
   const [reviews, reviewSummary, ownReview] = await Promise.all([
     getVisibleReviewsForTruck(truck.id, currentUser?.id),
     getReviewSummary(truck.id),
@@ -57,6 +60,7 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
         <span className="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
           Verified
         </span>
+        <TruckFavoriteButton truckId={truck.id} slug={truck.slug} isFavorited={truck.isFavorited} />
       </div>
       {truck.cuisineType.length > 0 && (
         <p className="mt-1 text-gray-500">{truck.cuisineType.join(', ')}</p>
@@ -98,7 +102,7 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
         </section>
       )}
 
-      <TruckMenu menu={truck.menu} />
+      <TruckMenu truckId={truck.id} slug={truck.slug} menu={truck.menu} />
 
       <TruckReviews
         truckId={truck.id}

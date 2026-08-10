@@ -1,16 +1,56 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Image from 'next/image'
-import type { MenuCategoryView } from '@chomp/types'
+import { SignedIn } from '@clerk/nextjs'
+import type { MenuCategoryView, MenuItemView } from '@chomp/types'
 import { formatUsd } from '@chomp/utils'
 import { getUniqueDietaryFlags, filterMenuByDietaryFlags } from '@/lib/menu'
+import { favoriteMenuItemAction, unfavoriteMenuItemAction } from '@/app/actions/favorites'
 
 type Props = {
+  truckId: string
+  slug: string
   menu: MenuCategoryView[]
 }
 
-export function TruckMenu({ menu }: Props) {
+/** Same no-local-state, revalidate-and-re-render pattern as TruckFavoriteButton/PhotoLikeButton. */
+function MenuItemFavoriteButton({
+  truckId,
+  slug,
+  item,
+}: {
+  truckId: string
+  slug: string
+  item: MenuItemView
+}) {
+  const [isPending, startTransition] = useTransition()
+
+  return (
+    <SignedIn>
+      <button
+        type="button"
+        disabled={isPending}
+        aria-pressed={item.isFavorited}
+        title={item.isFavorited ? 'Remove from favorites' : 'Save this item'}
+        onClick={() =>
+          startTransition(async () => {
+            if (item.isFavorited) {
+              await unfavoriteMenuItemAction(truckId, slug, item.id)
+            } else {
+              await favoriteMenuItemAction(truckId, slug, item.id)
+            }
+          })
+        }
+        className="disabled:opacity-50"
+      >
+        {item.isFavorited ? '♥' : '♡'}
+      </button>
+    </SignedIn>
+  )
+}
+
+export function TruckMenu({ truckId, slug, menu }: Props) {
   const [activeFlags, setActiveFlags] = useState<string[]>([])
   const allFlags = useMemo(() => getUniqueDietaryFlags(menu), [menu])
   const filteredMenu = useMemo(
@@ -75,6 +115,7 @@ export function TruckMenu({ menu }: Props) {
                       {item.price !== null && (
                         <span className="text-gray-500">{formatUsd(item.price)}</span>
                       )}
+                      <MenuItemFavoriteButton truckId={truckId} slug={slug} item={item} />
                     </div>
                     {item.description && (
                       <p className="text-sm text-gray-500">{item.description}</p>

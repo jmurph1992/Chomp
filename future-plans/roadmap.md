@@ -130,3 +130,20 @@ Next session starts here: R2 lifecycle rule first.
    With this, every item on the "operational completeness" list is done. The
    `future-plans/roadmap.md` item that originally bundled deletion and
    transfer together (item 5, above) is fully closed.
+
+7. ~~Account page, Phase 1 (profile details + reviews)~~ — **done
+   2026-08-10**, see `/docs/features/account.md`. Closes the "no 'my
+   reviews' page" gap noted in item 6 above — `/account` now surfaces a
+   signed-in user's own reviews, including orphaned ones, with a "(deleted)"
+   state instead of a link; embeds Clerk's own `<UserProfile />` for profile
+   editing rather than building custom forms.
+
+   **Phase 2 (favorites — trucks and individual menu items) is done too**,
+   also 2026-08-10, see `/docs/features/account.md#favorites`. Two new
+   cascading join tables (`TruckFavorite`, `MenuItemFavorite` — private
+   only, no public count); favorite toggles on the truck detail page, its
+   menu items, and the map's popups (the one genuinely new UI pattern —
+   Mapbox popups are raw DOM, not React, so that toggle manages its own
+   state directly instead of relying on `revalidatePath` + re-render like
+   everywhere else). With this, the account page's full original vision
+   (profile details, favorites, reviews) is built.

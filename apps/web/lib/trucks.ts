@@ -32,17 +32,24 @@ type NearbyTruckRow = {
   lat: number
   lng: number
   distanceMeters: number
+  isFavorited: boolean
 }
 
 /**
  * Trucks with a current location within `radiusMeters` of (lat, lng), nearest first.
  * Uses $queryRaw because PostGIS geography columns are Unsupported() in Prisma —
  * values are passed as tagged-template params, never string-concatenated.
+ *
+ * viewerId is optional — an anonymous request passes null/undefined, and the
+ * LEFT JOIN's `tf.user_id = NULL` never matches (standard SQL three-valued
+ * logic), so every truck's isFavorited comes back false, same shape as
+ * getVisibleReviewsForTruck's viewerId ?? '' pattern for photo likes.
  */
 export async function getNearbyTrucks(
   lat: number,
   lng: number,
   radiusMeters: number,
+  viewerId?: string | null,
 ): Promise<TruckMapMarker[]> {
   if (!isValidLat(lat) || !isValidLng(lng)) {
     throw new Error(`Invalid coordinates: (${lat}, ${lng})`)
@@ -58,9 +65,11 @@ export async function getNearbyTrucks(
       t.logo_url AS "logoUrl",
       ST_Y(tl.geom::geometry) AS "lat",
       ST_X(tl.geom::geometry) AS "lng",
-      ST_Distance(tl.geom, ST_MakePoint(${lng}, ${lat})::geography) AS "distanceMeters"
+      ST_Distance(tl.geom, ST_MakePoint(${lng}, ${lat})::geography) AS "distanceMeters",
+      (tf.user_id IS NOT NULL) AS "isFavorited"
     FROM trucks t
     JOIN truck_locations tl ON tl.truck_id = t.id AND tl.is_current = true
+    LEFT JOIN truck_favorites tf ON tf.truck_id = t.id AND tf.user_id = ${viewerId ?? null}
     WHERE t.is_active = true
       AND t.verification_status = 'verified'
       AND ST_DWithin(tl.geom, ST_MakePoint(${lng}, ${lat})::geography, ${radius})
@@ -71,16 +80,30 @@ export async function getNearbyTrucks(
   return rows
 }
 
-export async function getTruckBySlug(slug: string): Promise<TruckDetail | null> {
+/**
+ * viewerId is optional — same `viewerId ?? ''` pattern getVisibleReviewsForTruck
+ * already uses for photo likes: passing '' rather than making the favorites
+ * include conditional keeps the Prisma include shape consistent regardless of
+ * sign-in state, and an empty-string userId never matches a real row.
+ */
+export async function getTruckBySlug(
+  slug: string,
+  viewerId?: string | null,
+): Promise<TruckDetail | null> {
   const truck = await db.truck.findUnique({
     where: { slug, isActive: true, verificationStatus: 'verified' },
     include: {
       locations: { where: { isCurrent: true }, take: 1 },
       schedules: { where: { isCancelled: false } },
+      favorites: { where: { userId: viewerId ?? '' } },
       menuCategories: {
         orderBy: { displayOrder: 'asc' },
         include: {
-          items: { where: { isAvailable: true }, orderBy: { createdAt: 'asc' } },
+          items: {
+            where: { isAvailable: true },
+            orderBy: { createdAt: 'asc' },
+            include: { favorites: { where: { userId: viewerId ?? '' } } },
+          },
         },
       },
     },
@@ -101,6 +124,7 @@ export async function getTruckBySlug(slug: string): Promise<TruckDetail | null> 
     logoUrl: truck.logoUrl,
     coverUrl: truck.coverUrl,
     currentAddress: currentLocation?.address ?? null,
+    isFavorited: truck.favorites.length > 0,
     schedule: truck.schedules.map((s) => ({
       id: s.id,
       dayOfWeek: s.dayOfWeek,
@@ -123,6 +147,7 @@ export async function getTruckBySlug(slug: string): Promise<TruckDetail | null> 
         isFeatured: item.isFeatured,
         isAvailable: item.isAvailable,
         dietaryFlags: item.dietaryFlags,
+        isFavorited: item.favorites.length > 0,
       })),
     })),
   }

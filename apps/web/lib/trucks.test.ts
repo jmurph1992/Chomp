@@ -66,6 +66,7 @@ describe('getNearbyTrucks', () => {
         lat: 30.27,
         lng: -97.74,
         distanceMeters: 500,
+        isFavorited: false,
       },
     ]
     queryRaw.mockResolvedValue(rows)
@@ -83,6 +84,27 @@ describe('getNearbyTrucks', () => {
     const sql = (queryRaw.mock.calls.at(0)?.at(0) as string[]).join('')
     expect(sql).toContain('t.is_active = true')
     expect(sql).toContain("t.verification_status = 'verified'")
+  })
+
+  it('LEFT JOINs truck_favorites so a viewer sees isFavorited without excluding unfavorited trucks', async () => {
+    queryRaw.mockResolvedValue([])
+    await getNearbyTrucks(30.2672, -97.7431, 5000, 'u1')
+
+    const call = queryRaw.mock.calls.at(0) ?? []
+    const sql = (call.at(0) as string[]).join('')
+    expect(sql).toContain('LEFT JOIN truck_favorites')
+    expect(sql).toContain('isFavorited')
+    // Tagged-template args are [strings, ...interpolatedValues] in the order
+    // they appear in the template: lng, lat, viewerId, lng, lat, radius.
+    expect(call).toContain('u1')
+  })
+
+  it('passes null for viewerId when signed out, rather than omitting the join entirely', async () => {
+    queryRaw.mockResolvedValue([])
+    await getNearbyTrucks(30.2672, -97.7431, 5000)
+
+    const call = queryRaw.mock.calls.at(0) ?? []
+    expect(call).toContain(null)
   })
 })
 
@@ -117,6 +139,7 @@ describe('getTruckBySlug', () => {
       logoUrl: null,
       coverUrl: null,
       locations: [{ address: '123 Main St' }],
+      favorites: [],
       schedules: [
         {
           id: 's1',
@@ -143,6 +166,7 @@ describe('getTruckBySlug', () => {
               isFeatured: true,
               isAvailable: true,
               dietaryFlags: ['spicy'],
+              favorites: [],
             },
           ],
         },
@@ -158,6 +182,89 @@ describe('getTruckBySlug', () => {
     expect(result?.menu.at(0)?.items.at(0)?.price).toBe(4.5)
   })
 
+  it('maps isFavorited true/false for the truck and each menu item based on the favorites include', async () => {
+    findUnique.mockResolvedValue({
+      id: 't1',
+      slug: 'taco-kings',
+      name: 'Taco Kings',
+      description: null,
+      cuisineType: [],
+      phone: null,
+      website: null,
+      instagram: null,
+      logoUrl: null,
+      coverUrl: null,
+      locations: [],
+      favorites: [{ truckId: 't1', userId: 'u1' }],
+      schedules: [],
+      menuCategories: [
+        {
+          id: 'c1',
+          name: 'Tacos',
+          items: [
+            {
+              id: 'i1',
+              name: 'Al Pastor',
+              description: null,
+              price: null,
+              imageUrl: null,
+              isFeatured: false,
+              isAvailable: true,
+              dietaryFlags: [],
+              favorites: [{ menuItemId: 'i1', userId: 'u1' }],
+            },
+            {
+              id: 'i2',
+              name: 'Carnitas',
+              description: null,
+              price: null,
+              imageUrl: null,
+              isFeatured: false,
+              isAvailable: true,
+              dietaryFlags: [],
+              favorites: [],
+            },
+          ],
+        },
+      ],
+    })
+
+    const result = await getTruckBySlug('taco-kings', 'u1')
+
+    expect(result?.isFavorited).toBe(true)
+    expect(result?.menu[0]?.items[0]?.isFavorited).toBe(true)
+    expect(result?.menu[0]?.items[1]?.isFavorited).toBe(false)
+  })
+
+  it('scopes the favorites include by viewerId, defaulting to an empty string when signed out', async () => {
+    findUnique.mockResolvedValue({
+      id: 't1',
+      slug: 'taco-kings',
+      name: 'Taco Kings',
+      description: null,
+      cuisineType: [],
+      phone: null,
+      website: null,
+      instagram: null,
+      logoUrl: null,
+      coverUrl: null,
+      locations: [],
+      favorites: [],
+      schedules: [],
+      menuCategories: [],
+    })
+
+    await getTruckBySlug('taco-kings')
+
+    expect(findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          favorites: { where: { userId: '' } },
+        }),
+      }),
+    )
+  })
+
   it('queries only available items, ordered categories by displayOrder', async () => {
     findUnique.mockResolvedValue({
       id: 't1',
@@ -171,6 +278,7 @@ describe('getTruckBySlug', () => {
       logoUrl: null,
       coverUrl: null,
       locations: [],
+      favorites: [],
       schedules: [],
       menuCategories: [],
     })

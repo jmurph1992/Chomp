@@ -43,6 +43,13 @@ client and can't be un-hidden by inspecting the response.
   selected flag (dietary restrictions compose: vegan *and* gluten-free both
   required), not just any one of them. Categories with no matching items are
   dropped from the filtered view entirely.
+- **Favorites**: a heart toggle next to the truck name
+  (`components/truck-favorite-button.tsx`) and one per menu item (inside
+  `truck-menu.tsx`), both `<SignedIn>`-only, no public count — see
+  [`/docs/features/account.md#favorites`](./account.md). `MenuItemView.isFavorited`
+  is optional, not required — this type is shared with `lib/menu.ts#getMenuForEdit`
+  (the operator dashboard's own menu editor), which has no viewer/favoriting
+  concept at all; only the public `getTruckBySlug` path ever sets it.
 
 ## Scope cuts
 

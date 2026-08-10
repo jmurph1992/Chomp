@@ -141,11 +141,32 @@ describe('deleteTruckAction', () => {
 })
 
 describe('getNearbyTrucksAction', () => {
-  beforeEach(() => getNearbyTrucks.mockReset())
+  beforeEach(() => {
+    getNearbyTrucks.mockReset()
+    getCurrentUser.mockReset()
+  })
 
   it('returns an empty array for invalid coordinates without querying', async () => {
     const result = await getNearbyTrucksAction(999, 0)
     expect(result).toEqual([])
     expect(getNearbyTrucks).not.toHaveBeenCalled()
+  })
+
+  it('resolves the current viewer and passes their id through, for isFavorited', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'u1', role: 'customer' })
+    getNearbyTrucks.mockResolvedValue([])
+
+    await getNearbyTrucksAction(30.2672, -97.7431)
+
+    expect(getNearbyTrucks).toHaveBeenCalledWith(30.2672, -97.7431, 16093, 'u1')
+  })
+
+  it('passes undefined for a signed-out viewer, not a fabricated id', async () => {
+    getCurrentUser.mockResolvedValue(null)
+    getNearbyTrucks.mockResolvedValue([])
+
+    await getNearbyTrucksAction(30.2672, -97.7431)
+
+    expect(getNearbyTrucks).toHaveBeenCalledWith(30.2672, -97.7431, 16093, undefined)
   })
 })

@@ -19,6 +19,7 @@
 | [Rate Limiting](./features/rate-limiting.md) | Done | Shared Upstash Redis primitive limiting review submission, truck creation, upload-slot requests |
 | [Truck Verification](./features/truck-verification.md) | Done | Admin review queue; new trucks hidden from the map/public page until verified |
 | [Manager Invites](./features/manager-invites.md) | Done | Owner-only, email-gated shareable link to add a manager; cancel/remove built in |
+| [Account Page](./features/account.md) | Phase 1 done | Profile details (embedded Clerk `UserProfile`) + a read-only reviews list, including orphaned ones; favorites deferred |
 
 ---
 

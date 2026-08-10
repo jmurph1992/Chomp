@@ -24,6 +24,7 @@ const {
   deleteReview,
   setReviewVisibility,
   getAllReviewsForAdmin,
+  getReviewsForUser,
   MAX_REVIEW_BODY_LENGTH,
 } = await import('./reviews')
 
@@ -366,5 +367,95 @@ describe('getAllReviewsForAdmin', () => {
 
     expect(result[0]!.moderatedByEmail).toBeNull()
     expect(result[0]!.moderatedAt).toBeNull()
+  })
+})
+
+describe('getReviewsForUser', () => {
+  beforeEach(() => findMany.mockReset())
+
+  it('queries by userId only, newest first, with no isVisible filter', async () => {
+    findMany.mockResolvedValue([])
+    await getReviewsForUser('u1')
+
+    const call = findMany.mock.calls.at(0)?.at(0)
+    expect(call.where).toEqual({ userId: 'u1' })
+    expect(call.orderBy).toEqual({ createdAt: 'desc' })
+  })
+
+  it('maps a normal (truck-attached) review, including a photo', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'r1',
+        truckId: 't1',
+        rating: 5,
+        body: 'Great tacos!',
+        isVisible: true,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        truck: { slug: 'taco-kings', name: 'Taco Kings' },
+        photos: [{ id: 'p1', url: 'https://example.com/p1.jpg', caption: 'Yum' }],
+      },
+    ])
+
+    const result = await getReviewsForUser('u1')
+
+    expect(result[0]).toEqual({
+      id: 'r1',
+      truckId: 't1',
+      truckSlug: 'taco-kings',
+      truckName: 'Taco Kings',
+      rating: 5,
+      body: 'Great tacos!',
+      isVisible: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      photo: { id: 'p1', url: 'https://example.com/p1.jpg', caption: 'Yum' },
+    })
+  })
+
+  it('includes an orphaned (truck-deleted) review, with null truck fields', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'r2',
+        truckId: null,
+        rating: 3,
+        body: 'It was fine',
+        isVisible: true,
+        createdAt: new Date('2026-01-02T00:00:00Z'),
+        truck: null,
+        photos: [],
+      },
+    ])
+
+    const result = await getReviewsForUser('u1')
+
+    expect(result[0]).toEqual({
+      id: 'r2',
+      truckId: null,
+      truckSlug: null,
+      truckName: null,
+      rating: 3,
+      body: 'It was fine',
+      isVisible: true,
+      createdAt: '2026-01-02T00:00:00.000Z',
+      photo: null,
+    })
+  })
+
+  it('surfaces isVisible: false rather than filtering the review out', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'r3',
+        truckId: 't1',
+        rating: 1,
+        body: 'Rude staff',
+        isVisible: false,
+        createdAt: new Date('2026-01-03T00:00:00Z'),
+        truck: { slug: 'taco-kings', name: 'Taco Kings' },
+        photos: [],
+      },
+    ])
+
+    const result = await getReviewsForUser('u1')
+
+    expect(result[0]!.isVisible).toBe(false)
   })
 })
