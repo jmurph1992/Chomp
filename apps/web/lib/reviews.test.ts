@@ -280,13 +280,33 @@ describe('setReviewVisibility', () => {
 describe('getAllReviewsForAdmin', () => {
   beforeEach(() => findMany.mockReset())
 
-  it('queries every review, newest first, with no visibility filter', async () => {
+  it('queries every review, newest first, with no visibility filter but excluding orphaned (truck-deleted) rows', async () => {
     findMany.mockResolvedValue([])
     await getAllReviewsForAdmin()
 
     const call = findMany.mock.calls.at(0)?.at(0)
-    expect(call.where).toBeUndefined()
+    expect(call.where).toEqual({ truckId: { not: null } })
     expect(call.orderBy).toEqual({ createdAt: 'desc' })
+  })
+
+  it('skips a row whose truck relation is unexpectedly null, defensively', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'r1',
+        truckId: null,
+        truck: null,
+        rating: 5,
+        body: null,
+        isVisible: true,
+        moderationNote: null,
+        moderatedAt: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        user: { displayName: 'Ada', email: 'ada@example.com' },
+        moderator: null,
+      },
+    ])
+
+    expect(await getAllReviewsForAdmin()).toEqual([])
   })
 
   it('maps a row including truck, reviewer, and moderation info', async () => {

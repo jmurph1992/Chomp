@@ -13,8 +13,14 @@
   `/docs/features/manager-invites.md`. An owner can invite a manager by
   shareable, email-gated link; cancel a pending invite; or remove an existing
   manager.
-- **No way to delete a truck** or transfer ownership. Deactivating
-  (`isActive: false`) is the only operator-facing way to take a truck down.
+- ~~No way to transfer ownership~~ — **done 2026-08-10**, see
+  `/docs/features/operator-dashboard.md#ownership-transfer`. An owner can
+  offer ownership to an existing manager, who must explicitly accept before
+  anything changes.
+- ~~No way to delete a truck~~ — **done 2026-08-10**, see
+  `/docs/features/operator-dashboard.md#truck-deletion`. Owner-only, type-the-
+  name-to-confirm; reviews/photos are orphaned (kept, detached) rather than
+  deleted, everything else truck-owned cascades.
 - **Image upload.** Logo, cover, and menu-item photos are all pasted-URL only,
   same gap as `/go-live-requirements` items for menu/reviews — all blocked on
   Cloudflare R2/Images.

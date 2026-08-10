@@ -73,9 +73,13 @@ the app that needed to make that distinction.
   `lib/schedule.ts` for cross-truck protection.
 - **Remove a manager** (`removeManager`): the first removal path for
   `TruckOperator` rows at all — previously Prisma Studio was the only way. An
-  owner can never remove themselves through this function (explicit check),
-  and the delete itself is scoped to `role: 'manager'` as a second,
-  belt-and-suspenders layer even if that check were ever bypassed.
+  owner can never remove themselves through this function (explicit check;
+  use ownership transfer to step back instead — see
+  `/docs/features/operator-dashboard.md#ownership-transfer`), and the delete
+  itself is scoped to `role: 'manager'` as a second, belt-and-suspenders
+  layer even if that check were ever bypassed. Also clears any pending
+  ownership-transfer offer naming the removed manager, in the same
+  transaction as the delete.
 
 ## Expiry is lazy, not swept
 
@@ -128,9 +132,9 @@ documented for why `finalizeUploadAction` isn't separately limited in
 - No distinct "resend" action — re-inviting the same email reuses the
   existing live link rather than minting a new one.
 - No bulk invite (one email at a time).
-- No ownership transfer — `removeManager` explicitly refuses to let an owner
-  remove themselves, and there's no flow to make someone else the owner. See
-  `future-plans/roadmap.md` item 5.
+- ~~No ownership transfer~~ **Resolved**: an owner can offer ownership to an
+  existing manager, who must explicitly accept before anything changes — see
+  `/docs/features/operator-dashboard.md#ownership-transfer`.
 - No configurable expiry window — fixed at 7 days.
 
 ## Testing

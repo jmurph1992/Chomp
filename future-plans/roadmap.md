@@ -26,7 +26,9 @@ for the first time in the stack, ahead of its other documented uses
 - Review moderation queue (admins can only one-way hide from the truck page
   today; no way to view/unhide without Prisma Studio)
 - ~~Manager-invite flow~~ — done 2026-08-07, see the prioritized list below
-- Truck deletion / ownership transfer (deactivating is the only lever today)
+- ~~Truck ownership transfer~~ — done 2026-08-10, see the prioritized list
+  below. ~~Truck deletion~~ — also done 2026-08-10, see the prioritized list
+  below.
 - ~~R2 bucket lifecycle rule for orphaned/un-finalized uploads~~ — done
   2026-08-07, see the prioritized list below
 
@@ -100,6 +102,31 @@ Next session starts here: R2 lifecycle rule first.
    (no Resend — that stays deliberately unwired until it has its own natural
    trigger), 7-day expiry, owner-only, with cancel-pending and
    remove-existing-manager both built in the same pass.
-5. **Truck deletion / ownership transfer** — highest-risk item: touches data
-   retention, reviews/photos cascade behavior, and ownership handoff. Needs
-   the most product decision-making up front.
+5. ~~Truck ownership transfer~~ — **done 2026-08-10**, see
+   `/docs/features/operator-dashboard.md#ownership-transfer`. Built as an
+   offer/accept flow between the owner and an existing manager (new nullable
+   `Truck.pendingOwnerId` column) — the owner initiates, but nothing changes
+   until the target manager explicitly accepts, mirroring the manager-invite
+   flow's own explicit-accept step.
+
+   **Truck deletion is still open** — split out as its own, higher-risk item
+   below, now that transfer is done.
+
+6. ~~Truck deletion~~ — **done 2026-08-10**, see
+   `/docs/features/operator-dashboard.md#truck-deletion`. Resolved the FK
+   tension noted below by orphaning, not preserving-as-viewable: an owner can
+   permanently delete their truck (type-the-name-to-confirm, owner-only).
+   `TruckOperator`/`TruckLocation`/`TruckSchedule`/`MenuCategory`/`MenuItem`/
+   `TruckEvent` all cascade-delete at the DB level; `Review`/`ReviewPhoto`
+   rows are orphaned (`truckId` set `NULL`, `onDelete: SetNull`) — kept for
+   record-keeping, invisible everywhere in the product (no "my reviews" page
+   exists yet to show them — deliberately deferred, see memory
+   `project-my-reviews-page-deferred`). Cloudflare Images assets (logo,
+   cover, menu items, review photos) are gathered before the delete and
+   best-effort cleaned up after. Verified against the real Neon dev DB with a
+   fully-populated throwaway truck — every cascade path confirmed, including
+   the `MenuItem`/`MenuCategory` multi-path case.
+
+   With this, every item on the "operational completeness" list is done. The
+   `future-plans/roadmap.md` item that originally bundled deletion and
+   transfer together (item 5, above) is fully closed.

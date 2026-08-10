@@ -4,9 +4,12 @@ const queryRaw = vi.fn()
 const findUnique = vi.fn()
 const findMany = vi.fn()
 const truckUpdate = vi.fn()
+const truckDelete = vi.fn()
 const txTruckCreate = vi.fn()
 const txTruckOperatorCreate = vi.fn()
 const txUserUpdate = vi.fn()
+const deleteCloudflareImage = vi.fn()
+const extractCloudflareImageId = vi.fn()
 
 const tx = {
   truck: { create: txTruckCreate },
@@ -19,9 +22,11 @@ vi.mock('@chomp/db', () => ({
   db: {
     $queryRaw: queryRaw,
     $transaction: transaction,
-    truck: { findUnique, findMany, update: truckUpdate },
+    truck: { findUnique, findMany, update: truckUpdate, delete: truckDelete },
   },
 }))
+
+vi.mock('./storage', () => ({ deleteCloudflareImage, extractCloudflareImageId }))
 
 const {
   getNearbyTrucks,
@@ -33,6 +38,7 @@ const {
   verifyTruck,
   rejectTruck,
   holdTruck,
+  deleteTruck,
   isValidTruckName,
   isValidTruckDescription,
   isValidCuisineType,
@@ -425,5 +431,94 @@ describe('holdTruck', () => {
       where: { id: 't1' },
       data: { verificationStatus: 'onHold', verificationNote: 'Health code complaint' },
     })
+  })
+})
+
+describe('deleteTruck', () => {
+  beforeEach(() => {
+    findUnique.mockReset()
+    truckDelete.mockReset().mockResolvedValue({})
+    deleteCloudflareImage.mockReset()
+    extractCloudflareImageId.mockReset()
+  })
+
+  it('throws when the truck does not exist, without deleting', async () => {
+    findUnique.mockResolvedValue(null)
+    await expect(deleteTruck('t1', 'Taco Kings')).rejects.toThrow('not found')
+    expect(truckDelete).not.toHaveBeenCalled()
+  })
+
+  it('rejects a name that does not match, without deleting', async () => {
+    findUnique.mockResolvedValue({
+      name: 'Taco Kings',
+      logoUrl: null,
+      coverUrl: null,
+      menuItems: [],
+      reviewPhotos: [],
+    })
+    await expect(deleteTruck('t1', 'Taco King')).rejects.toThrow('does not match')
+    expect(truckDelete).not.toHaveBeenCalled()
+  })
+
+  it('trims the confirmed name before comparing', async () => {
+    findUnique.mockResolvedValue({
+      name: 'Taco Kings',
+      logoUrl: null,
+      coverUrl: null,
+      menuItems: [],
+      reviewPhotos: [],
+    })
+    await deleteTruck('t1', '  Taco Kings  ')
+    expect(truckDelete).toHaveBeenCalledWith({ where: { id: 't1' } })
+  })
+
+  it('deletes the truck, then best-effort cleans up every Cloudflare Images asset', async () => {
+    findUnique.mockResolvedValue({
+      name: 'Taco Kings',
+      logoUrl: 'https://imagedelivery.net/x/logo-id/public',
+      coverUrl: 'https://imagedelivery.net/x/cover-id/public',
+      menuItems: [{ imageUrl: 'https://imagedelivery.net/x/item-id/public' }, { imageUrl: null }],
+      reviewPhotos: [{ url: 'https://imagedelivery.net/x/photo-id/public' }],
+    })
+    extractCloudflareImageId.mockImplementation((url: string) => url.split('/').at(-2) ?? null)
+
+    await deleteTruck('t1', 'Taco Kings')
+
+    expect(truckDelete).toHaveBeenCalledWith({ where: { id: 't1' } })
+    expect(deleteCloudflareImage).toHaveBeenCalledWith('logo-id')
+    expect(deleteCloudflareImage).toHaveBeenCalledWith('cover-id')
+    expect(deleteCloudflareImage).toHaveBeenCalledWith('item-id')
+    expect(deleteCloudflareImage).toHaveBeenCalledWith('photo-id')
+    expect(deleteCloudflareImage).toHaveBeenCalledTimes(4)
+  })
+
+  it('skips Cloudflare cleanup entirely when the truck has no images', async () => {
+    findUnique.mockResolvedValue({
+      name: 'Taco Kings',
+      logoUrl: null,
+      coverUrl: null,
+      menuItems: [],
+      reviewPhotos: [],
+    })
+
+    await deleteTruck('t1', 'Taco Kings')
+
+    expect(deleteCloudflareImage).not.toHaveBeenCalled()
+  })
+
+  it('gathers Cloudflare asset URLs before the delete, since the rows are gone afterward', async () => {
+    const calls: string[] = []
+    findUnique.mockImplementation(async () => {
+      calls.push('findUnique')
+      return { name: 'Taco Kings', logoUrl: null, coverUrl: null, menuItems: [], reviewPhotos: [] }
+    })
+    truckDelete.mockImplementation(async () => {
+      calls.push('delete')
+      return {}
+    })
+
+    await deleteTruck('t1', 'Taco Kings')
+
+    expect(calls).toEqual(['findUnique', 'delete'])
   })
 })

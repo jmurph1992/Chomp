@@ -6,17 +6,38 @@ const createInvite = vi.fn()
 const cancelInvite = vi.fn()
 const claimInvite = vi.fn()
 const removeManager = vi.fn()
+const initiateOwnershipTransfer = vi.fn()
+const cancelOwnershipTransfer = vi.fn()
+const acceptOwnershipTransfer = vi.fn()
+const declineOwnershipTransfer = vi.fn()
 const checkRateLimit = vi.fn()
 const revalidatePath = vi.fn()
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/operators', () => ({ requireOperator }))
-vi.mock('@/lib/invites', () => ({ createInvite, cancelInvite, claimInvite, removeManager }))
+vi.mock('@/lib/invites', () => ({
+  createInvite,
+  cancelInvite,
+  claimInvite,
+  removeManager,
+  initiateOwnershipTransfer,
+  cancelOwnershipTransfer,
+  acceptOwnershipTransfer,
+  declineOwnershipTransfer,
+}))
 vi.mock('@/lib/rate-limit', () => ({ checkRateLimit, inviteLimiter: {} }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 
-const { createInviteAction, cancelInviteAction, removeManagerAction, claimInviteAction } =
-  await import('./invites')
+const {
+  createInviteAction,
+  cancelInviteAction,
+  removeManagerAction,
+  initiateTransferAction,
+  cancelTransferAction,
+  acceptTransferAction,
+  declineTransferAction,
+  claimInviteAction,
+} = await import('./invites')
 
 beforeEach(() => {
   getCurrentUser.mockReset()
@@ -25,6 +46,10 @@ beforeEach(() => {
   cancelInvite.mockReset()
   claimInvite.mockReset()
   removeManager.mockReset()
+  initiateOwnershipTransfer.mockReset()
+  cancelOwnershipTransfer.mockReset()
+  acceptOwnershipTransfer.mockReset()
+  declineOwnershipTransfer.mockReset()
   checkRateLimit.mockReset().mockResolvedValue(undefined)
   revalidatePath.mockReset()
 })
@@ -97,6 +122,74 @@ describe('removeManagerAction', () => {
     requireOperator.mockResolvedValue(owner)
     await removeManagerAction('t1', 'u2')
     expect(removeManager).toHaveBeenCalledWith('t1', 'u2', 'owner1')
+    expect(revalidatePath).toHaveBeenCalledWith('/dashboard/t1/team')
+  })
+})
+
+describe('initiateTransferAction', () => {
+  it('rejects a manager, without writing', async () => {
+    requireOperator.mockResolvedValue(manager)
+    await expect(initiateTransferAction('t1', 'u2')).rejects.toThrow('Only the truck owner')
+    expect(initiateOwnershipTransfer).not.toHaveBeenCalled()
+  })
+
+  it('initiates for an owner and revalidates', async () => {
+    requireOperator.mockResolvedValue(owner)
+    await initiateTransferAction('t1', 'u2')
+    expect(initiateOwnershipTransfer).toHaveBeenCalledWith('t1', 'u2')
+    expect(revalidatePath).toHaveBeenCalledWith('/dashboard/t1/team')
+  })
+})
+
+describe('cancelTransferAction', () => {
+  it('rejects a manager, without writing', async () => {
+    requireOperator.mockResolvedValue(manager)
+    await expect(cancelTransferAction('t1')).rejects.toThrow('Only the truck owner')
+    expect(cancelOwnershipTransfer).not.toHaveBeenCalled()
+  })
+
+  it('cancels for an owner and revalidates', async () => {
+    requireOperator.mockResolvedValue(owner)
+    await cancelTransferAction('t1')
+    expect(cancelOwnershipTransfer).toHaveBeenCalledWith('t1')
+    expect(revalidatePath).toHaveBeenCalledWith('/dashboard/t1/team')
+  })
+})
+
+describe('acceptTransferAction', () => {
+  it('rejects when signed out, without calling acceptOwnershipTransfer', async () => {
+    getCurrentUser.mockResolvedValue(null)
+    await expect(acceptTransferAction('t1')).rejects.toThrow('Sign in required')
+    expect(acceptOwnershipTransfer).not.toHaveBeenCalled()
+  })
+
+  it('does not require requireOperator/requireOwner — any signed-in user can attempt it, the lib layer enforces the pendingOwner check', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'mgr1' })
+    await acceptTransferAction('t1')
+    expect(requireOperator).not.toHaveBeenCalled()
+    expect(acceptOwnershipTransfer).toHaveBeenCalledWith('t1', 'mgr1')
+    expect(revalidatePath).toHaveBeenCalledWith('/dashboard/t1/team')
+    expect(revalidatePath).toHaveBeenCalledWith('/dashboard')
+  })
+
+  it('propagates errors from acceptOwnershipTransfer unchanged', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'mgr1' })
+    acceptOwnershipTransfer.mockRejectedValue(new Error('No pending ownership offer for you on this truck'))
+    await expect(acceptTransferAction('t1')).rejects.toThrow('No pending ownership offer')
+  })
+})
+
+describe('declineTransferAction', () => {
+  it('rejects when signed out, without calling declineOwnershipTransfer', async () => {
+    getCurrentUser.mockResolvedValue(null)
+    await expect(declineTransferAction('t1')).rejects.toThrow('Sign in required')
+    expect(declineOwnershipTransfer).not.toHaveBeenCalled()
+  })
+
+  it('delegates to declineOwnershipTransfer for a signed-in user and revalidates', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'mgr1' })
+    await declineTransferAction('t1')
+    expect(declineOwnershipTransfer).toHaveBeenCalledWith('t1', 'mgr1')
     expect(revalidatePath).toHaveBeenCalledWith('/dashboard/t1/team')
   })
 })

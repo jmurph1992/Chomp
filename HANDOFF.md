@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-07
+2026-08-10
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard (now including manager invites), and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. All migrations are applied to the Neon dev DB (8 total, latest adds the `truck_invites` table — see "This session" below). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and now invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail). The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites are now built too: an owner can add a manager via a shareable, email-gated link (`/dashboard/[truckId]/team`), cancel a pending invite, or remove an existing manager — see "This session" below. The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), and photo upload (R2 + Cloudflare Images hybrid) wired up — all code-complete. All migrations are applied to the Neon dev DB (10 total, latest adds cascade/orphan behavior for truck deletion — see "This session" below). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and now excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites: an owner can add a manager via a shareable, email-gated link (`/dashboard/[truckId]/team`), cancel a pending invite, or remove an existing manager. Ownership transfer: an owner can offer ownership to an existing manager, who must explicitly accept before anything changes. **New this session**: truck deletion — an owner can permanently delete their truck from `/dashboard/[truckId]`'s "Danger zone" (type-the-name-to-confirm). Every item on the "operational completeness" roadmap list is now done. Still deliberately not built: a "my reviews" user-profile page (orphaned reviews are DB-only retention for now — see memory `project-my-reviews-page-deferred`), and account deletion/erasure handling (roadmap item 4, a separate compliance question). The app is ready to run/deploy against real data.**
 
 ---
 
@@ -160,9 +160,9 @@ pnpm dev
    below. ~~Real moderation queue~~ — **done 2026-08-05**, see "This session"
    below and `/go-live-requirements/reviews.md`.
 10. ~~Operator dashboard truck-creation rate limiting~~ — **done 2026-08-04**.
-    ~~Manager-invite flow~~ — **done 2026-08-07**, see "This session" below.
-    Truck deletion/ownership transfer still open, see
-    `/go-live-requirements/operator-dashboard.md`.
+    ~~Manager-invite flow~~ — **done 2026-08-07**. ~~Ownership transfer~~ —
+    **done 2026-08-10**, see "This session" below. Truck deletion still open,
+    see `/go-live-requirements/operator-dashboard.md`.
 11. ~~Photo upload upload-slot rate limiting~~ — **done 2026-08-04**. ~~R2
     lifecycle rule~~ — **done 2026-08-07**, see "This session" below and
     `/go-live-requirements/photo-upload.md`.
@@ -187,11 +187,200 @@ pnpm dev
     `INNGEST_EVENT_KEY`/`INNGEST_SIGNING_KEY` in Vercel's env vars (not
     `INNGEST_DEV`), and sync the deployed `/api/inngest` URL with Inngest
     Cloud.
-18. **Next up (per `future-plans/roadmap.md`'s prioritized list)**: with the
-    R2 lifecycle rule and manager-invite flow both done, only truck
-    deletion/ownership transfer remains on that list — highest-risk item,
-    needs real product decisions on data retention and cascade behavior
-    before implementation.
+18. ~~Truck deletion~~ — **done 2026-08-10**, see "This session (2026-08-10,
+    truck deletion)" below. With this, every item on the "operational
+    completeness" roadmap list (`future-plans/roadmap.md` item 3) is done.
+    **Next up**: nothing prioritized — the two remaining known gaps are a
+    "my reviews" page (deliberately deferred, tracked in memory
+    `project-my-reviews-page-deferred`, not a go-live blocker) and account
+    deletion/erasure handling (roadmap item 4, its own compliance decision).
+
+## This session (2026-08-10, truck deletion)
+- **Closed roadmap item 6 ("Truck deletion")** — see
+  `/docs/features/operator-dashboard.md#truck-deletion` and
+  `future-plans/roadmap.md` for the updated punch list. This closes out the
+  entire "operational completeness" list.
+- **Product decisions locked in with the user before building** (per
+  `CLAUDE.md`'s "ask questions first" rule, across two rounds — the user
+  interrupted the first round to ask a genuinely open design question before
+  answering): reviews/photos are **orphaned** (`truckId` set `NULL`, DB-only
+  retention, invisible everywhere in the product) rather than deleted —
+  resolved this way specifically because a "my reviews" page that would
+  actually surface them doesn't exist yet and was deliberately deferred
+  (saved to memory `project-my-reviews-page-deferred` so a future session
+  builds it with orphaned reviews in mind from the start, not as an
+  afterthought); owner-only (no admin hard-delete power this pass); type-the-
+  truck's-exact-name-to-confirm (the strongest confirmation gate in the app,
+  stronger than the click-through Confirm/Cancel used everywhere else in the
+  dashboard).
+- **Migration `20260810210840_truck_deletion_cascades`**, applied to the
+  Neon dev DB after showing the user the exact generated SQL and getting
+  explicit approval (per `CLAUDE.md`'s migration rule): `onDelete: Cascade`
+  added to `TruckOperator`/`TruckLocation`/`TruckSchedule`/`MenuCategory`/
+  `MenuItem`/`TruckEvent`'s FKs to `Truck` (extending the one cascade
+  precedent that already existed, `TruckInvite → Truck`); `Review.truckId`/
+  `ReviewPhoto.truckId` made nullable with `onDelete: SetNull`. No backfill —
+  `DROP NOT NULL` only relaxes the constraint going forward.
+- **New `lib/trucks.ts#deleteTruck`**: validates the typed name matches
+  (throws before touching the DB otherwise), gathers every Cloudflare Images
+  asset URL still attached to the truck (logo, cover, every menu item's
+  photo, every review's photo) *before* calling a single `db.truck.delete()`
+  — the DB cascade/SetNull handles every related row declaratively, no
+  hand-written multi-step delete needed — then best-effort cleans up each
+  gathered Cloudflare asset afterward, reusing `extractCloudflareImageId`/
+  `deleteCloudflareImage` from `lib/storage.ts` exactly as
+  `lib/review-photos.ts` already does.
+- **Verified the cascade for real, not just mocked**: wrote a throwaway
+  script (deleted after use, same pattern as prior credential-verification
+  sessions) that created a fully-populated test truck against the real Neon
+  dev DB — a manager, a location, a schedule entry, a menu category with an
+  item, an event, an invite, and a review with a photo and a like — deleted
+  it via `deleteTruck`, and asserted all 11 expected outcomes directly
+  against the DB: every operational table's rows gone, `Review`/
+  `ReviewPhoto` survived with `truck_id = NULL`, `PhotoLike` untouched. This
+  specifically exercised the one real risk flagged during planning — whether
+  `MenuItem` (no direct cascade from `MenuCategory`) would still get cleaned
+  up correctly via its own direct `truckId → Truck` cascade — confirmed yes,
+  Postgres resolves multi-path cascades within one statement. Cleaned up the
+  script and the review/photo/like/user rows it created afterward.
+- **`lib/reviews.ts#getAllReviewsForAdmin` fix**: now filters
+  `where: { truckId: { not: null } }` — an orphaned review has no truck left
+  to moderate against, so excluding it from `/admin/reviews` is correct
+  behavior, not a workaround. Its row-mapping also switched from an
+  unconditional `row.truck.slug`/`row.truck.name` (which would throw on an
+  orphaned row's now-nullable `truck` relation) to a `flatMap` guard that
+  both narrows the type and defends against the filter ever being loosened
+  by mistake — deliberately not a non-null assertion (`!`), which doesn't
+  appear anywhere else in this codebase's `lib/*.ts` files.
+- **`toReviewView` (`lib/reviews.ts`) refactored** to accept `truckId` as a
+  separate parameter rather than reading `row.truckId` — both call sites
+  (`getVisibleReviewsForTruck`, `getOwnReview`) already know it from their
+  own query's filter, and it's always a concrete truck-scoped call, never an
+  orphaned row; this avoided widening `ReviewView.truckId`'s type or
+  asserting non-null on every truck-scoped read just to accommodate the two
+  admin-queue rows that can now be orphaned.
+- **New `apps/web/lib/truck-validation.ts`** — the same client-bundle bug
+  documented from the photo-upload session recurred here: `deleteTruck`'s
+  Cloudflare cleanup pulls `lib/storage.ts`'s Node-only deps (`node:crypto`,
+  the AWS SDK) into `lib/trucks.ts`'s import graph, which broke
+  `next build` for the two client components (`create-truck-form.tsx`,
+  `truck-profile-form.tsx`) that import pure name/description length
+  constants from `lib/trucks.ts`. Fixed with the same pattern already
+  established for `lib/review-validation.ts`: pure validation split into a
+  zero-server-import module, `lib/trucks.ts` re-exports it for existing
+  server-side callers, the two client components import from the new module
+  directly instead.
+- **New UI**: `components/dashboard/delete-truck-section.tsx` — a "Danger
+  zone" section on `/dashboard/[truckId]`, owner-only (the page now
+  re-resolves `role` via `requireOperator`, same pattern as `team/page.tsx`,
+  since the layout doesn't thread it down). Delete button stays disabled
+  until the typed name exactly matches; on success, client-side
+  `router.push('/dashboard')` (same `redirect()`-throws-through-`try/catch`
+  reasoning already documented on `createTruckAction`).
+- **New `deleteTruckAction`** (`app/actions/trucks.ts`) — a local
+  `requireOwner` helper, same tiny duplicated-per-file pattern already used
+  in `app/actions/invites.ts` rather than sharing across actions files.
+- **Confirmed, not assumed**: `getFeedPage`'s `JOIN trucks t ON t.id =
+  fi.truck_id` is an inner join, so a deleted truck's feed rows silently stop
+  appearing on the very next query — no synchronous feed refresh needed on
+  delete.
+- **Tests**: extended `lib/trucks.test.ts` (new `deleteTruck` coverage — name
+  mismatch, unknown truck, happy path with full Cloudflare cleanup, no-images
+  no-op, gather-before-delete ordering), `lib/reviews.test.ts` (updated the
+  now-stale "no visibility filter" `getAllReviewsForAdmin` test, added an
+  orphaned-row defensive-skip case), `app/actions/trucks.test.ts` (new
+  `deleteTruckAction` coverage — non-operator, manager, owner success,
+  error-propagation). Full `pnpm --filter @chomp/web test`: 270/270 passing
+  (up from 259). Full `pnpm type-check` across all packages: clean (caught
+  the `toReviewView` typing issue from `Review.truckId` going nullable,
+  fixed by the parameter refactor above). Ran a real `pnpm build` — first
+  attempt failed on the `node:crypto` client-bundle bug above, second
+  attempt after the `truck-validation.ts` fix compiled clean;
+  `/dashboard/[truckId]` grew from 2.9kB to 3.38kB (the new Danger Zone);
+  reverted the incidental `tsconfig.json` mutation, same as every prior
+  session.
+- **Not yet done / next session**: none of this session's changes are
+  committed to git yet — left as unstaged for review, same pattern as prior
+  sessions. Nothing prioritized next — see Open Item 18 above for the two
+  remaining known gaps, neither of which is a go-live blocker.
+
+## This session (2026-08-10, ownership transfer)
+- **Closed roadmap item 5 ("Truck ownership transfer")** — see
+  `/docs/features/operator-dashboard.md#ownership-transfer` and
+  `future-plans/roadmap.md` for the updated punch list. Truck **deletion**
+  was deliberately split out as its own item (6) and left open — flagged
+  from the start as the highest-risk half of the original bundled roadmap
+  item, needing more product decision-making than fit in one session.
+- **Scope was refined mid-planning**: the first plan (approved, then
+  reconsidered before any code was written) was an instant one-sided
+  transfer — owner picks an existing manager, done immediately, no
+  acceptance step. The user pushed back on that in plan review: ownership
+  carries real responsibility, so it should require the target's explicit
+  consent, the same way the manager-invite flow already requires the
+  invitee to accept rather than auto-enrolling them. Replanned as an
+  **offer/accept** flow before any implementation started.
+- **Migration `20260810203148_add_truck_pending_owner`**, applied to the
+  Neon dev DB after showing the user the exact generated SQL and getting
+  explicit approval (per `CLAUDE.md`'s migration rule): one nullable
+  `trucks.pending_owner_id` column (FK → `users.id`, `ON DELETE SET NULL`),
+  no backfill. Deliberately no expiry field, unlike `TruckInvite` — a
+  pending transfer is only ever visible to the specific manager it names, on
+  their own authenticated dashboard (no shareable link that could leak), and
+  the owner can cancel any time.
+- **New `apps/web/lib/invites.ts` functions** (alongside `listManagers`/
+  `removeManager`, which already own "team composition" logic in this file):
+  `getPendingOwner` (reuses the existing `TruckManagerView` shape — no new
+  type needed), `initiateOwnershipTransfer` (rejects a target who isn't an
+  existing manager on this exact truck), `cancelOwnershipTransfer`,
+  `acceptOwnershipTransfer` (swaps `Truck.ownerId` and both `TruckOperator`
+  roles inside one transaction, with `updateMany` row-count checks as a race
+  guard — same belt-and-suspenders idiom used throughout this file),
+  `declineOwnershipTransfer`. `accept`/`decline` are gated entirely by "does
+  `pendingOwnerId` match the caller" rather than `requireOwner` — the
+  accepting user is a manager, not the owner, so the usual owner-only guard
+  doesn't apply (same reasoning as `claimInviteAction`'s different auth
+  shape).
+- **`removeManager` updated**: now wrapped in `db.$transaction` so it also
+  clears `pendingOwnerId` when the manager being removed is the current
+  pending-transfer target — otherwise removing that manager would leave a
+  dangling, unacceptable offer on the truck. Its docstring's stale
+  "(ownership transfer isn't built yet)" parenthetical was replaced with a
+  pointer to the new flow.
+- **New UI** (`components/dashboard/team-manager.tsx`): owner sees a "Make
+  owner" button per manager row (hidden while a transfer is already pending,
+  replaced by a "transfer pending — Cancel" banner); the offered manager
+  sees an accept/decline banner at the top of their own view of the same
+  `/dashboard/[truckId]/team` page. Same inline `useState`-confirm +
+  `useTransition` pattern as `Remove`/`Cancel invite` elsewhere in this
+  component — no new modal component.
+- **Tests**: extended `lib/invites.test.ts` (40 tests total in that file now
+  — new coverage for all four transfer functions plus `removeManager`'s
+  pending-offer cleanup, including a simulated-race rollback case for
+  `acceptOwnershipTransfer`) and `app/actions/invites.test.ts` (new coverage
+  for all four new actions' auth guards). Full `pnpm --filter @chomp/web
+  test`: 259/259 passing (up from 236). Full `pnpm type-check` across all
+  packages: clean. Ran a real `pnpm build` per the standing project lesson
+  that `tsc`/vitest miss client-bundle bugs — compiled clean,
+  `/dashboard/[truckId]/team` still shows up as its own route; reverted the
+  incidental `tsconfig.json` mutation `next build` causes, same as every
+  prior session.
+- **Docs updated**: `/docs/features/operator-dashboard.md` (new "Ownership
+  transfer" section), `/docs/features/manager-invites.md` (fixed two stale
+  "no ownership transfer" references), `/go-live-requirements/operator-
+  dashboard.md` (split the old combined bullet — transfer done, deletion
+  still open), `/docs/architecture/schema.md` (added `pending_owner_id`),
+  `future-plans/roadmap.md` (marked transfer done, split deletion out as its
+  own item 6 with the recap of locked-in decisions and the open FK tension).
+- **Not yet done / next session**: the seed script only creates `owner`
+  `TruckOperator` rows, no `manager` fixtures — manual end-to-end testing of
+  the full offer → accept/decline/cancel flow (as two different signed-in
+  users) wasn't done in this session; needs a manager added via the
+  invite flow first (real Clerk credentials), same prerequisite gap noted
+  for other interactive-flow testing throughout this project. None of this
+  session's changes are committed to git yet — left as unstaged for review,
+  same pattern as prior sessions. Next up per the roadmap: truck deletion
+  (item 6) — needs a fresh planning round to resolve the `Review`/
+  `ReviewPhoto` FK-nullability question before anything can be built.
 
 ## This session (2026-08-07, manager-invite flow)
 - **Closed roadmap item 4 ("Manager-invite flow")** — see
@@ -830,6 +1019,8 @@ pnpm dev
 | `20260804140000_add_truck_verification_status` | Replaces `trucks.is_verified` (boolean) with `verification_status` (enum: pending/verified/rejected/onHold) + `verification_note`; backfills `is_verified = true` → `verified` | Yes (applied 2026-08-04) |
 | `20260805194319_add_review_moderation_audit` | Adds `reviews.moderation_note`, `moderated_by_user_id` (FK → `users.id`), `moderated_at` — no backfill | Yes (applied 2026-08-05) |
 | `20260807164758_add_truck_invites` | New `InviteStatus` enum + `truck_invites` table (token, status, expiry, creator/acceptor FKs) — no backfill | Yes (applied 2026-08-07) |
+| `20260810203148_add_truck_pending_owner` | Adds `trucks.pending_owner_id` (FK → `users.id`, `ON DELETE SET NULL`) — no backfill | Yes (applied 2026-08-10) |
+| `20260810210840_truck_deletion_cascades` | `onDelete: Cascade` on `TruckOperator`/`TruckLocation`/`TruckSchedule`/`MenuCategory`/`MenuItem`/`TruckEvent`'s FKs to `Truck`; `reviews.truck_id`/`review_photos.truck_id` made nullable with `ON DELETE SET NULL` — no backfill | Yes (applied 2026-08-10) |
 
 ---
 

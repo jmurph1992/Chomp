@@ -78,6 +78,103 @@ manager); zero trucks shows a "Create your truck" CTA instead of a list. The
 client component — needed for the `<select onChange>`, which a Server
 Component can't do) if the user operates more than one truck.
 
+## Ownership transfer
+
+An owner can hand a truck off to one of its existing managers — the only way
+to step back from a truck short of deactivating it entirely
+(`isActive: false`, which takes it off the map for everyone, managers
+included). Built as an **offer/accept** flow, not an instant swap, since
+ownership carries real responsibility: the owner picks a manager and
+initiates, but the transfer only actually happens once that manager
+explicitly accepts — mirroring the manager-invite flow's own explicit-accept
+step, just without an email/token since both people already have accounts
+and a relationship to this exact truck.
+
+- **Data model**: one nullable column, `Truck.pendingOwnerId` (FK → `users.id`,
+  `ON DELETE SET NULL`, migration `20260810203148_add_truck_pending_owner`).
+  No expiry field — unlike a `TruckInvite` link, which can leak or be
+  forwarded, a pending transfer is only ever visible to the specific manager
+  it names, on their own authenticated dashboard, and the owner can cancel it
+  any time.
+- **`lib/invites.ts`**: `initiateOwnershipTransfer`/`cancelOwnershipTransfer`
+  (owner-gated at the action layer via the existing `requireOwner`),
+  `acceptOwnershipTransfer`/`declineOwnershipTransfer` (gated entirely by
+  "does `pendingOwnerId` match you" — the accepting user is a manager, not
+  the owner, so `requireOwner` doesn't apply). `acceptOwnershipTransfer` swaps
+  `Truck.ownerId` and both `TruckOperator` roles inside one transaction, with
+  `updateMany` row-count checks as a race guard (same belt-and-suspenders
+  idiom used throughout this file). `getPendingOwner` reuses the existing
+  `TruckManagerView` shape — no new type needed.
+- **`removeManager`** now also clears `pendingOwnerId` (same transaction) if
+  the manager being removed is the current pending-transfer target —
+  otherwise a removed manager could leave a dangling, unacceptable offer on
+  the truck.
+- **UI** (`/dashboard/[truckId]/team`): the owner sees a "Make owner" button
+  per manager row (hidden while a transfer is already pending, replaced by a
+  "transfer pending — Cancel" banner); the offered manager sees an
+  accept/decline banner at the top of their own view of the same page. Same
+  inline confirm pattern as `Remove`/`Cancel invite` throughout this
+  component.
+- **Not built**: rate limiting (not a spam vector — requires an existing
+  owner + existing manager relationship on this exact truck already), an
+  audit/history table (state is overwritten in place, same as every other
+  status flip in the app so far).
+
+## Truck deletion
+
+An owner can permanently delete their truck from `/dashboard/[truckId]`'s
+"Danger zone" — the only genuinely destructive action in the app (everything
+else is a reversible status flip: `isActive`, `verificationStatus`,
+`isVisible`). Owner-only, no admin delete power this pass.
+
+- **Confirmation**: the owner must type the truck's exact current name before
+  the delete button enables — a stronger gate than the inline Confirm/Cancel
+  used everywhere else in this dashboard, proportionate to being irreversible.
+  Validated again server-side in `lib/trucks.ts#deleteTruck`, not just in the UI.
+- **Cascade lives at the DB level**, not in hand-written application code —
+  `TruckOperator`/`TruckLocation`/`TruckSchedule`/`MenuCategory`/`MenuItem`/
+  `TruckEvent` all get `onDelete: Cascade` (extending the one cascade
+  precedent that already existed, `TruckInvite → Truck`), so a single
+  `db.truck.delete()` cleans up every truck-owned operational row. Verified
+  against the real Neon dev DB with a fully-populated throwaway truck
+  (manager, location, schedule, menu category+item, event, invite, review
+  with a photo and a like) — every cascade fired correctly, including the
+  `MenuItem`/`MenuCategory` multi-path case (`MenuItem` has no direct cascade
+  from `MenuCategory`, but is removed via its own direct `truckId → Truck`
+  cascade before the `MenuCategory` FK is checked — Postgres resolves
+  multi-path cascades within one statement).
+- **Reviews and photos are orphaned, not deleted**: `Review.truckId` and
+  `ReviewPhoto.truckId` are nullable with `onDelete: SetNull` — customer-
+  authored content survives with `truckId` cleared, invisible everywhere in
+  the product (no query anywhere fetches by a null `truckId`, and
+  `getAllReviewsForAdmin` explicitly excludes them — see
+  `/docs/features/reviews.md`). This is DB-only retention for record-keeping
+  today, not a user-facing feature — a "my reviews" page that would actually
+  surface these to the reviewer is a deliberately separate, later piece of work.
+  `isVisible` is left untouched on orphaned rows — it means "hidden by a
+  moderator for content reasons," a different concept from "truck no longer
+  exists," so a future page can still render the review's real content next
+  to a "truck deleted" state.
+- **Cloudflare Images cleanup**: every asset URL still attached to the truck
+  (logo, cover, every menu item's photo, every review's photo) is gathered
+  *before* the delete — the rows holding those URLs won't exist afterward —
+  and best-effort cleaned up after the delete succeeds, reusing
+  `extractCloudflareImageId`/`deleteCloudflareImage` from `lib/storage.ts`
+  exactly as `lib/review-photos.ts` already does. A photo asset is deleted
+  even for an orphaned (kept) `ReviewPhoto` row — nothing will ever show it
+  again regardless of whether the row survives.
+- **The feed needs no special handling**: `getFeedPage`'s `JOIN trucks t ON
+  t.id = fi.truck_id` is an inner join, so a deleted truck's feed rows simply
+  stop appearing on the very next query — no synchronous refresh required.
+- **`lib/truck-validation.ts`** was split out from `lib/trucks.ts` in the
+  same pass — `deleteTruck`'s Cloudflare cleanup pulls in `lib/storage.ts`'s
+  Node-only deps (`node:crypto`, the AWS SDK), which broke the two client
+  components (`create-truck-form.tsx`, `truck-profile-form.tsx`) that import
+  pure name/description length constants from `lib/trucks.ts`. Same fix as
+  the one already documented for reviews: pure validation moved to a
+  zero-server-import module the client components import directly, mirroring
+  `lib/review-validation.ts`.
+
 ## Scope cuts (not built this pass)
 
 - ~~No manager-invite flow~~ **Resolved**: an owner can invite a manager by

@@ -5,6 +5,7 @@ const operatorFindUnique = vi.fn()
 const operatorCreate = vi.fn()
 const operatorFindMany = vi.fn()
 const operatorDeleteMany = vi.fn()
+const operatorUpdateMany = vi.fn()
 const inviteFindFirst = vi.fn()
 const inviteFindUnique = vi.fn()
 const inviteFindMany = vi.fn()
@@ -12,15 +13,20 @@ const inviteCreate = vi.fn()
 const inviteUpdate = vi.fn()
 const inviteUpdateMany = vi.fn()
 const userUpdate = vi.fn()
+const truckFindUnique = vi.fn()
+const truckUpdate = vi.fn()
+const truckUpdateMany = vi.fn()
 
 // claimInvite's actual grant (operator creation + marking the invite
-// accepted + upgrading a customer's role) runs inside db.$transaction's
-// callback form — reusing the same mock fns for both the tx-scoped and
-// top-level calls (matching review-photos.test.ts's precedent) lets a single
-// mock config cover both.
+// accepted + upgrading a customer's role), removeManager's pending-offer
+// cleanup, and acceptOwnershipTransfer's role swap all run inside
+// db.$transaction's callback form — reusing the same mock fns for both the
+// tx-scoped and top-level calls (matching review-photos.test.ts's
+// precedent) lets a single mock config cover all of them.
 const tx = {
-  truckOperator: { findUnique: operatorFindUnique, create: operatorCreate },
+  truckOperator: { findUnique: operatorFindUnique, create: operatorCreate, deleteMany: operatorDeleteMany, updateMany: operatorUpdateMany },
   truckInvite: { update: inviteUpdate },
+  truck: { update: truckUpdate, updateMany: truckUpdateMany },
   user: { update: userUpdate },
 }
 const transaction = vi.fn((callback: (txArg: typeof tx) => unknown) => callback(tx))
@@ -33,6 +39,7 @@ vi.mock('@chomp/db', () => ({
       create: operatorCreate,
       findMany: operatorFindMany,
       deleteMany: operatorDeleteMany,
+      updateMany: operatorUpdateMany,
     },
     truckInvite: {
       findFirst: inviteFindFirst,
@@ -42,6 +49,7 @@ vi.mock('@chomp/db', () => ({
       update: inviteUpdate,
       updateMany: inviteUpdateMany,
     },
+    truck: { findUnique: truckFindUnique, update: truckUpdate, updateMany: truckUpdateMany },
     user: { update: userUpdate },
     $transaction: transaction,
   },
@@ -56,6 +64,11 @@ const {
   removeManager,
   listManagers,
   getInvitePreview,
+  getPendingOwner,
+  initiateOwnershipTransfer,
+  cancelOwnershipTransfer,
+  acceptOwnershipTransfer,
+  declineOwnershipTransfer,
 } = await import('./invites')
 
 beforeEach(() => {
@@ -64,6 +77,7 @@ beforeEach(() => {
   operatorCreate.mockReset().mockResolvedValue({})
   operatorFindMany.mockReset()
   operatorDeleteMany.mockReset()
+  operatorUpdateMany.mockReset()
   inviteFindFirst.mockReset()
   inviteFindUnique.mockReset()
   inviteFindMany.mockReset()
@@ -71,6 +85,9 @@ beforeEach(() => {
   inviteUpdate.mockReset().mockResolvedValue({})
   inviteUpdateMany.mockReset()
   userUpdate.mockReset().mockResolvedValue({})
+  truckFindUnique.mockReset()
+  truckUpdate.mockReset().mockResolvedValue({})
+  truckUpdateMany.mockReset()
   transaction.mockReset().mockImplementation((callback: (txArg: typeof tx) => unknown) => callback(tx))
 })
 
@@ -303,6 +320,7 @@ describe('removeManager', () => {
   it("rejects an owner trying to remove themselves, without touching the database", async () => {
     await expect(removeManager('t1', 'owner1', 'owner1')).rejects.toThrow("can't remove themselves")
     expect(operatorDeleteMany).not.toHaveBeenCalled()
+    expect(transaction).not.toHaveBeenCalled()
   })
 
   it('scopes the delete by truckId, userId, and role: manager (cross-truck/owner-safe)', async () => {
@@ -316,5 +334,128 @@ describe('removeManager', () => {
   it('throws when the target is not a manager on this truck (0 rows affected)', async () => {
     operatorDeleteMany.mockResolvedValue({ count: 0 })
     await expect(removeManager('t1', 'u2', 'owner1')).rejects.toThrow('not found')
+  })
+
+  it('clears a pending ownership offer naming the removed manager, in the same transaction', async () => {
+    operatorDeleteMany.mockResolvedValue({ count: 1 })
+    await removeManager('t1', 'u2', 'owner1')
+    expect(transaction).toHaveBeenCalledTimes(1)
+    expect(truckUpdateMany).toHaveBeenCalledWith({
+      where: { id: 't1', pendingOwnerId: 'u2' },
+      data: { pendingOwnerId: null },
+    })
+  })
+})
+
+describe('getPendingOwner', () => {
+  it('returns null when no transfer is pending', async () => {
+    truckFindUnique.mockResolvedValue({ pendingOwner: null })
+    expect(await getPendingOwner('t1')).toBeNull()
+  })
+
+  it('maps the pending owner to a TruckManagerView shape', async () => {
+    truckFindUnique.mockResolvedValue({
+      pendingOwner: { id: 'u2', email: 'manager@example.com', displayName: 'Manager' },
+    })
+    expect(await getPendingOwner('t1')).toEqual({
+      userId: 'u2',
+      email: 'manager@example.com',
+      displayName: 'Manager',
+    })
+  })
+})
+
+describe('initiateOwnershipTransfer', () => {
+  it('rejects a target with no TruckOperator row on this truck at all', async () => {
+    operatorFindUnique.mockResolvedValue(null)
+    await expect(initiateOwnershipTransfer('t1', 'u2')).rejects.toThrow('existing manager')
+    expect(truckUpdate).not.toHaveBeenCalled()
+  })
+
+  it('rejects a target whose role on this truck is owner, not manager', async () => {
+    operatorFindUnique.mockResolvedValue({ truckId: 't1', userId: 'u2', role: 'owner' })
+    await expect(initiateOwnershipTransfer('t1', 'u2')).rejects.toThrow('existing manager')
+    expect(truckUpdate).not.toHaveBeenCalled()
+  })
+
+  it('sets pendingOwnerId for a valid manager target', async () => {
+    operatorFindUnique.mockResolvedValue({ truckId: 't1', userId: 'u2', role: 'manager' })
+    await initiateOwnershipTransfer('t1', 'u2')
+    expect(truckUpdate).toHaveBeenCalledWith({ where: { id: 't1' }, data: { pendingOwnerId: 'u2' } })
+  })
+})
+
+describe('cancelOwnershipTransfer', () => {
+  it('clears pendingOwnerId when one is set', async () => {
+    truckUpdateMany.mockResolvedValue({ count: 1 })
+    await cancelOwnershipTransfer('t1')
+    expect(truckUpdateMany).toHaveBeenCalledWith({
+      where: { id: 't1', pendingOwnerId: { not: null } },
+      data: { pendingOwnerId: null },
+    })
+  })
+
+  it('throws when nothing is pending (0 rows affected)', async () => {
+    truckUpdateMany.mockResolvedValue({ count: 0 })
+    await expect(cancelOwnershipTransfer('t1')).rejects.toThrow('No pending')
+  })
+})
+
+describe('acceptOwnershipTransfer', () => {
+  it('rejects a caller who is not the pending target, without starting a transaction', async () => {
+    truckFindUnique.mockResolvedValue({ ownerId: 'owner1', pendingOwnerId: 'u2' })
+    await expect(acceptOwnershipTransfer('t1', 'someone-else')).rejects.toThrow(
+      'No pending ownership offer',
+    )
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects when there is no pending offer at all', async () => {
+    truckFindUnique.mockResolvedValue({ ownerId: 'owner1', pendingOwnerId: null })
+    await expect(acceptOwnershipTransfer('t1', 'u2')).rejects.toThrow('No pending ownership offer')
+  })
+
+  it('swaps ownerId and both TruckOperator roles atomically', async () => {
+    truckFindUnique.mockResolvedValue({ ownerId: 'owner1', pendingOwnerId: 'u2' })
+    operatorUpdateMany.mockResolvedValue({ count: 1 })
+
+    await acceptOwnershipTransfer('t1', 'u2')
+
+    expect(transaction).toHaveBeenCalledTimes(1)
+    expect(truckUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { ownerId: 'u2', pendingOwnerId: null },
+    })
+    expect(operatorUpdateMany).toHaveBeenCalledWith({
+      where: { truckId: 't1', userId: 'u2', role: 'manager' },
+      data: { role: 'owner' },
+    })
+    expect(operatorUpdateMany).toHaveBeenCalledWith({
+      where: { truckId: 't1', userId: 'owner1', role: 'owner' },
+      data: { role: 'manager' },
+    })
+  })
+
+  it('rolls back when the promote/demote counts do not both equal 1 (race condition)', async () => {
+    truckFindUnique.mockResolvedValue({ ownerId: 'owner1', pendingOwnerId: 'u2' })
+    operatorUpdateMany.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 })
+
+    await expect(acceptOwnershipTransfer('t1', 'u2')).rejects.toThrow('please retry')
+  })
+})
+
+describe('declineOwnershipTransfer', () => {
+  it('clears pendingOwnerId scoped to the declining user', async () => {
+    truckUpdateMany.mockResolvedValue({ count: 1 })
+    await declineOwnershipTransfer('t1', 'u2')
+    expect(truckUpdateMany).toHaveBeenCalledWith({
+      where: { id: 't1', pendingOwnerId: 'u2' },
+      data: { pendingOwnerId: null },
+    })
+  })
+
+  it('throws when the caller is not the pending target (0 rows affected)', async () => {
+    truckUpdateMany.mockResolvedValue({ count: 0 })
+    await expect(declineOwnershipTransfer('t1', 'u2')).rejects.toThrow('No pending ownership offer')
   })
 })

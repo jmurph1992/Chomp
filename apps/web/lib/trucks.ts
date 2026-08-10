@@ -9,28 +9,19 @@ import type {
   TruckProfileInput,
 } from '@chomp/types'
 import { clampRadiusMeters, isValidLat, isValidLng } from './geo'
+import { deleteCloudflareImage, extractCloudflareImageId } from './storage'
+import { isValidCuisineType, isValidTruckDescription, isValidTruckName } from './truck-validation'
+
+export {
+  MAX_CUISINE_TYPES,
+  MAX_TRUCK_DESCRIPTION_LENGTH,
+  MAX_TRUCK_NAME_LENGTH,
+  isValidCuisineType,
+  isValidTruckDescription,
+  isValidTruckName,
+} from './truck-validation'
 
 const MAX_SLUG_ATTEMPTS = 20
-export const MAX_TRUCK_NAME_LENGTH = 100
-export const MAX_TRUCK_DESCRIPTION_LENGTH = 2000
-export const MAX_CUISINE_TYPES = 10
-const MAX_CUISINE_TYPE_LENGTH = 30
-
-export function isValidTruckName(name: string): boolean {
-  return typeof name === 'string' && name.trim().length > 0 && name.length <= MAX_TRUCK_NAME_LENGTH
-}
-
-export function isValidTruckDescription(description: string | null): boolean {
-  if (description === null) return true
-  return description.length <= MAX_TRUCK_DESCRIPTION_LENGTH
-}
-
-export function isValidCuisineType(cuisineType: string[]): boolean {
-  return (
-    cuisineType.length <= MAX_CUISINE_TYPES &&
-    cuisineType.every((c) => typeof c === 'string' && c.length > 0 && c.length <= MAX_CUISINE_TYPE_LENGTH)
-  )
-}
 
 type NearbyTruckRow = {
   id: string
@@ -293,4 +284,52 @@ export async function holdTruck(truckId: string, reason: string): Promise<void> 
     where: { id: truckId },
     data: { verificationStatus: 'onHold', verificationNote: reason },
   })
+}
+
+/**
+ * Permanently deletes a truck. Requires the caller to have typed the truck's
+ * exact current name first — the strongest confirmation gate in this app,
+ * proportionate to this being the only truly irreversible action here.
+ *
+ * A single db.truck.delete() does the entire cascade at the DB level:
+ * TruckOperator/TruckLocation/TruckSchedule/MenuCategory/MenuItem/TruckEvent/
+ * TruckInvite rows are all removed (onDelete: Cascade), and Review/
+ * ReviewPhoto rows are orphaned rather than deleted (onDelete: SetNull) —
+ * customer-authored content survives with truckId cleared, invisible
+ * everywhere in the product but kept for record-keeping.
+ *
+ * Cloudflare Images assets aren't touched by any DB cascade, so every asset
+ * URL still attached to this truck (logo, cover, menu-item photos, review
+ * photos) is gathered *before* the delete — the rows holding those URLs
+ * won't exist afterward — and best-effort cleaned up after the delete
+ * succeeds, mirroring lib/review-photos.ts's existing cleanup pattern.
+ */
+export async function deleteTruck(truckId: string, confirmedName: string): Promise<void> {
+  const truck = await db.truck.findUnique({
+    where: { id: truckId },
+    select: {
+      name: true,
+      logoUrl: true,
+      coverUrl: true,
+      menuItems: { select: { imageUrl: true } },
+      reviewPhotos: { select: { url: true } },
+    },
+  })
+  if (!truck) throw new Error('Truck not found')
+  if (confirmedName.trim() !== truck.name) {
+    throw new Error('Truck name does not match — deletion cancelled')
+  }
+
+  await db.truck.delete({ where: { id: truckId } })
+
+  const urls = [
+    truck.logoUrl,
+    truck.coverUrl,
+    ...truck.menuItems.map((item) => item.imageUrl),
+    ...truck.reviewPhotos.map((photo) => photo.url),
+  ]
+  for (const url of urls) {
+    const imageId = url ? extractCloudflareImageId(url) : null
+    if (imageId) await deleteCloudflareImage(imageId)
+  }
 }

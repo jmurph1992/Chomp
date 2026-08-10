@@ -33,6 +33,7 @@ users (
 trucks (
   id              uuid PRIMARY KEY,
   owner_id        uuid REFERENCES users(id),
+  pending_owner_id uuid REFERENCES users(id) ON DELETE SET NULL, -- set while an owner-initiated transfer awaits the target manager's accept/decline, see docs/features/operator-dashboard.md#ownership-transfer
   name            text NOT NULL,
   slug            text UNIQUE NOT NULL,   -- SEO-friendly URL: /trucks/taco-kings
   description     text,
@@ -161,10 +162,12 @@ menu_items (
 -- is_visible allows admins to hide abusive reviews without deleting them.
 -- moderation_note/moderated_by_user_id/moderated_at record the reason and
 -- who/when for the most recent hide or unhide — see docs/features/reviews.md's
--- "Moderation queue" section.
+-- "Moderation queue" section. truck_id is nullable: NULL means the truck was
+-- deleted (ON DELETE SET NULL) — the review survives, orphaned, invisible
+-- everywhere in the product — see docs/features/operator-dashboard.md#truck-deletion.
 reviews (
   id                    uuid PRIMARY KEY,
-  truck_id              uuid REFERENCES trucks(id),
+  truck_id              uuid REFERENCES trucks(id) ON DELETE SET NULL,
   user_id               uuid REFERENCES users(id),
   rating                int CHECK (rating BETWEEN 1 AND 5),
   body                  text,
@@ -178,11 +181,12 @@ reviews (
 
 -- Photos uploaded by customers alongside reviews.
 -- truck_id is denormalized here to avoid a join when building the feed.
+-- Nullable for the same reason as reviews.truck_id above.
 review_photos (
   id              uuid PRIMARY KEY,
   review_id       uuid REFERENCES reviews(id),
   user_id         uuid REFERENCES users(id),
-  truck_id        uuid REFERENCES trucks(id),
+  truck_id        uuid REFERENCES trucks(id) ON DELETE SET NULL,
   url             text NOT NULL,
   caption         text,
   likes_count     int DEFAULT 0,    -- denormalized count for fast feed sorting

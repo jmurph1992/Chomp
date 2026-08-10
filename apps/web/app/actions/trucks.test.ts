@@ -4,6 +4,7 @@ const getCurrentUser = vi.fn()
 const requireOperator = vi.fn()
 const createTruck = vi.fn()
 const updateTruckProfile = vi.fn()
+const deleteTruck = vi.fn()
 const getNearbyTrucks = vi.fn()
 const revalidatePath = vi.fn()
 const checkRateLimit = vi.fn()
@@ -11,7 +12,7 @@ const checkRateLimit = vi.fn()
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/operators', () => ({ requireOperator }))
 vi.mock('@/lib/rate-limit', () => ({ checkRateLimit, truckCreationLimiter: {} }))
-vi.mock('@/lib/trucks', () => ({ createTruck, updateTruckProfile, getNearbyTrucks }))
+vi.mock('@/lib/trucks', () => ({ createTruck, updateTruckProfile, deleteTruck, getNearbyTrucks }))
 vi.mock('@/lib/geo', () => ({
   DEFAULT_RADIUS_METERS: 16093,
   isValidLat: (v: number) => v >= -90 && v <= 90,
@@ -19,9 +20,8 @@ vi.mock('@/lib/geo', () => ({
 }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 
-const { createTruckAction, updateTruckProfileAction, getNearbyTrucksAction } = await import(
-  './trucks'
-)
+const { createTruckAction, updateTruckProfileAction, deleteTruckAction, getNearbyTrucksAction } =
+  await import('./trucks')
 
 describe('createTruckAction', () => {
   beforeEach(() => {
@@ -99,6 +99,44 @@ describe('updateTruckProfileAction', () => {
     await updateTruckProfileAction('t1', 'taco-kings', input)
 
     expect(updateTruckProfile).toHaveBeenCalledWith('t1', input)
+  })
+})
+
+describe('deleteTruckAction', () => {
+  beforeEach(() => {
+    requireOperator.mockReset()
+    deleteTruck.mockReset()
+    revalidatePath.mockReset()
+  })
+
+  it('rejects a non-operator, without deleting', async () => {
+    requireOperator.mockRejectedValue(new Error('Not authorized to manage this truck'))
+    await expect(deleteTruckAction('t1', 'Taco Kings')).rejects.toThrow('Not authorized')
+    expect(deleteTruck).not.toHaveBeenCalled()
+  })
+
+  it('rejects a manager (owner-only action), without deleting', async () => {
+    requireOperator.mockResolvedValue({ user: { id: 'mgr1' }, role: 'manager' })
+    await expect(deleteTruckAction('t1', 'Taco Kings')).rejects.toThrow('Only the truck owner')
+    expect(deleteTruck).not.toHaveBeenCalled()
+  })
+
+  it('deletes for an owner and revalidates the dashboard and map', async () => {
+    requireOperator.mockResolvedValue({ user: { id: 'owner1' }, role: 'owner' })
+    deleteTruck.mockResolvedValue(undefined)
+
+    await deleteTruckAction('t1', 'Taco Kings')
+
+    expect(deleteTruck).toHaveBeenCalledWith('t1', 'Taco Kings')
+    expect(revalidatePath).toHaveBeenCalledWith('/dashboard')
+    expect(revalidatePath).toHaveBeenCalledWith('/')
+  })
+
+  it('propagates a name-mismatch error from deleteTruck unchanged', async () => {
+    requireOperator.mockResolvedValue({ user: { id: 'owner1' }, role: 'owner' })
+    deleteTruck.mockRejectedValue(new Error('Truck name does not match — deletion cancelled'))
+
+    await expect(deleteTruckAction('t1', 'wrong')).rejects.toThrow('does not match')
   })
 })
 

@@ -183,10 +183,14 @@ export async function listManagers(truckId: string): Promise<TruckManagerView[]>
 
 /**
  * Removes a manager's access. An owner can never remove themselves through
- * this path (ownership transfer isn't built yet) — enforced both by an
- * explicit check and, belt-and-suspenders, by scoping the delete itself to
- * role: 'manager' so an owner row can't be deleted here even if the
- * explicit check were ever bypassed.
+ * this path — enforced both by an explicit check and, belt-and-suspenders,
+ * by scoping the delete itself to role: 'manager' so an owner row can't be
+ * deleted here even if the explicit check were ever bypassed. Use
+ * initiateOwnershipTransfer to step back from a truck instead.
+ *
+ * Also clears any pending ownership-transfer offer naming this manager as
+ * the target, in the same transaction — otherwise removing a manager who
+ * has a pending offer would leave a dangling, unacceptable offer on the truck.
  */
 export async function removeManager(
   truckId: string,
@@ -197,8 +201,96 @@ export async function removeManager(
     throw new Error("Owners can't remove themselves — transfer ownership isn't built yet")
   }
 
-  const result = await db.truckOperator.deleteMany({
-    where: { truckId, userId: managerUserId, role: 'manager' },
+  await db.$transaction(async (tx) => {
+    const result = await tx.truckOperator.deleteMany({
+      where: { truckId, userId: managerUserId, role: 'manager' },
+    })
+    if (result.count === 0) throw new Error('Manager not found')
+
+    await tx.truck.updateMany({
+      where: { id: truckId, pendingOwnerId: managerUserId },
+      data: { pendingOwnerId: null },
+    })
   })
-  if (result.count === 0) throw new Error('Manager not found')
+}
+
+/** Current owner and any pending-transfer target, for the team page's owner-only banner. */
+export async function getPendingOwner(truckId: string): Promise<TruckManagerView | null> {
+  const truck = await db.truck.findUnique({
+    where: { id: truckId },
+    select: { pendingOwner: { select: { id: true, email: true, displayName: true } } },
+  })
+  if (!truck?.pendingOwner) return null
+  return {
+    userId: truck.pendingOwner.id,
+    email: truck.pendingOwner.email,
+    displayName: truck.pendingOwner.displayName,
+  }
+}
+
+/**
+ * Owner offers ownership to an existing manager. Overwrites any previous
+ * pending offer on this truck — only one offer is live at a time.
+ */
+export async function initiateOwnershipTransfer(truckId: string, newOwnerUserId: string): Promise<void> {
+  const target = await db.truckOperator.findUnique({
+    where: { truckId_userId: { truckId, userId: newOwnerUserId } },
+  })
+  if (!target || target.role !== 'manager') {
+    throw new Error('Only an existing manager can be offered ownership')
+  }
+
+  await db.truck.update({ where: { id: truckId }, data: { pendingOwnerId: newOwnerUserId } })
+}
+
+/** Owner revokes a pending offer before it's accepted or declined. */
+export async function cancelOwnershipTransfer(truckId: string): Promise<void> {
+  const result = await db.truck.updateMany({
+    where: { id: truckId, pendingOwnerId: { not: null } },
+    data: { pendingOwnerId: null },
+  })
+  if (result.count === 0) throw new Error('No pending ownership transfer')
+}
+
+/**
+ * The offered manager accepts — swaps Truck.ownerId and both TruckOperator
+ * roles in one transaction. Scoped entirely by "does pendingOwnerId match
+ * you," not requireOperator/requireOwner, since the accepting user is a
+ * manager, not (yet) the owner.
+ */
+export async function acceptOwnershipTransfer(truckId: string, acceptingUserId: string): Promise<void> {
+  const truck = await db.truck.findUnique({
+    where: { id: truckId },
+    select: { ownerId: true, pendingOwnerId: true },
+  })
+  if (!truck || truck.pendingOwnerId !== acceptingUserId) {
+    throw new Error('No pending ownership offer for you on this truck')
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.truck.update({
+      where: { id: truckId },
+      data: { ownerId: acceptingUserId, pendingOwnerId: null },
+    })
+    const promoted = await tx.truckOperator.updateMany({
+      where: { truckId, userId: acceptingUserId, role: 'manager' },
+      data: { role: 'owner' },
+    })
+    const demoted = await tx.truckOperator.updateMany({
+      where: { truckId, userId: truck.ownerId, role: 'owner' },
+      data: { role: 'manager' },
+    })
+    if (promoted.count !== 1 || demoted.count !== 1) {
+      throw new Error('Ownership transfer failed — team membership changed, please retry')
+    }
+  })
+}
+
+/** The offered manager declines — just clears the offer, nothing else changes. */
+export async function declineOwnershipTransfer(truckId: string, decliningUserId: string): Promise<void> {
+  const result = await db.truck.updateMany({
+    where: { id: truckId, pendingOwnerId: decliningUserId },
+    data: { pendingOwnerId: null },
+  })
+  if (result.count === 0) throw new Error('No pending ownership offer for you on this truck')
 }

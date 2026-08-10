@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { createTruckAction } from '@/app/actions/trucks'
-import { MAX_TRUCK_DESCRIPTION_LENGTH, MAX_TRUCK_NAME_LENGTH } from '@/lib/trucks'
+import { MAX_TRUCK_DESCRIPTION_LENGTH, MAX_TRUCK_NAME_LENGTH } from '@/lib/truck-validation'
 
 export function CreateTruckForm() {
   const router = useRouter()

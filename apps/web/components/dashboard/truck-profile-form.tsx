@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import type { TruckProfileEdit } from '@chomp/types'
 import { updateTruckProfileAction } from '@/app/actions/trucks'
-import { MAX_TRUCK_DESCRIPTION_LENGTH, MAX_TRUCK_NAME_LENGTH } from '@/lib/trucks'
+import { MAX_TRUCK_DESCRIPTION_LENGTH, MAX_TRUCK_NAME_LENGTH } from '@/lib/truck-validation'
 import { ImageUploadField } from '@/components/image-upload-field'
 
 const STATUS_COPY: Record<TruckProfileEdit['verificationStatus'], { label: string; className: string }> = {

@@ -70,6 +70,13 @@ button is gone; all moderation now happens through this one queue, since a
 one-click button can't collect a required reason without adding a second
 modal component.
 
+`truckId` is nullable on both `Review` and `ReviewPhoto` — `null` means the
+truck was deleted (see `/docs/features/operator-dashboard.md#truck-deletion`);
+the row itself survives (`onDelete: SetNull`), invisible everywhere in the
+product. `getAllReviewsForAdmin()` explicitly filters `truckId: { not: null }`
+— an orphaned review has no truck left to moderate against, so it's correctly
+out of scope for this queue, not silently missing.
+
 ## Scope cuts (not built this pass)
 
 - **No rate limiting.** Nothing stops a signed-in user from submitting review

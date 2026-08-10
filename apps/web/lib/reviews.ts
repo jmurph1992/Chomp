@@ -8,7 +8,6 @@ export { MAX_REVIEW_BODY_LENGTH, isValidReviewBody } from './review-validation'
 
 type ReviewRow = {
   id: string
-  truckId: string
   userId: string
   rating: number
   body: string | null
@@ -24,11 +23,15 @@ type ReviewRow = {
   }[]
 }
 
-function toReviewView(row: ReviewRow): ReviewView {
+// truckId is passed in separately, not read off the row — both call sites
+// below already know it (it's their own query's filter), and Review.truckId
+// is nullable at the DB level now (orphaned once a truck is deleted), which
+// these truck-scoped views never surface.
+function toReviewView(row: ReviewRow, truckId: string): ReviewView {
   const photo = row.photos[0]
   return {
     id: row.id,
-    truckId: row.truckId,
+    truckId,
     userId: row.userId,
     userDisplayName: row.user.displayName,
     userAvatarUrl: row.user.avatarUrl,
@@ -72,7 +75,7 @@ export async function getVisibleReviewsForTruck(
       },
     },
   })
-  return rows.map(toReviewView)
+  return rows.map((row) => toReviewView(row, truckId))
 }
 
 export async function getReviewSummary(truckId: string): Promise<ReviewSummary> {
@@ -98,7 +101,7 @@ export async function getOwnReview(truckId: string, userId: string): Promise<Rev
       photos: { take: 1, include: { likes: { where: { userId } } } },
     },
   })
-  return row ? toReviewView(row) : null
+  return row ? toReviewView(row, truckId) : null
 }
 
 /** Creates or updates the caller's review for this truck (one review per user per truck). */
@@ -155,9 +158,15 @@ export async function setReviewVisibility(
   })
 }
 
-/** Every review across all trucks, for the admin moderation queue. */
+/**
+ * Every review across all trucks, for the admin moderation queue. Excludes
+ * orphaned reviews (truckId: null, from a deleted truck) — there's no truck
+ * left to moderate against, so they're not a workaround, they're correctly
+ * out of scope for this queue.
+ */
 export async function getAllReviewsForAdmin(): Promise<AdminReviewView[]> {
   const rows = await db.review.findMany({
+    where: { truckId: { not: null } },
     orderBy: { createdAt: 'desc' },
     include: {
       truck: { select: { slug: true, name: true } },
@@ -166,19 +175,25 @@ export async function getAllReviewsForAdmin(): Promise<AdminReviewView[]> {
     },
   })
 
-  return rows.map((row) => ({
-    id: row.id,
-    truckId: row.truckId,
-    truckSlug: row.truck.slug,
-    truckName: row.truck.name,
-    userDisplayName: row.user.displayName,
-    userEmail: row.user.email,
-    rating: row.rating,
-    body: row.body,
-    isVisible: row.isVisible,
-    moderationNote: row.moderationNote,
-    moderatedByEmail: row.moderator?.email ?? null,
-    moderatedAt: row.moderatedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
-  }))
+  // The where clause above already excludes orphaned rows, but Prisma's
+  // generated type can't reflect that — this guard both narrows the type
+  // and defends against the filter ever being loosened by mistake.
+  return rows.flatMap((row) => {
+    if (!row.truck || row.truckId === null) return []
+    return [{
+      id: row.id,
+      truckId: row.truckId,
+      truckSlug: row.truck.slug,
+      truckName: row.truck.name,
+      userDisplayName: row.user.displayName,
+      userEmail: row.user.email,
+      rating: row.rating,
+      body: row.body,
+      isVisible: row.isVisible,
+      moderationNote: row.moderationNote,
+      moderatedByEmail: row.moderator?.email ?? null,
+      moderatedAt: row.moderatedAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+    }]
+  })
 }
