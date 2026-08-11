@@ -15,7 +15,7 @@ type FeedItemRow = {
   type: 'review' | 'photo'
   itemId: string
   truckId: string
-  userId: string
+  userId: string | null
   rating: number | null
   content: string | null
   imageUrl: string | null
@@ -43,10 +43,14 @@ export async function getFeedPage(
       fi.created_at AS "createdAt",
       t.slug AS "truckSlug",
       t.name AS "truckName",
-      u.display_name AS "authorDisplayName"
+      CASE WHEN fi.user_id IS NULL THEN 'Deleted user' ELSE u.display_name END AS "authorDisplayName"
     FROM feed_items fi
     JOIN trucks t ON t.id = fi.truck_id
-    JOIN users u ON u.id = fi.user_id
+    -- LEFT JOIN, not JOIN: an inner join here would silently drop a feed item
+    -- once its author is erased (Review.userId/ReviewPhoto.userId -> NULL),
+    -- contradicting account erasure's "content stays visible, anonymized"
+    -- decision — see docs/features/account-erasure.md.
+    LEFT JOIN users u ON u.id = fi.user_id
     ORDER BY fi.created_at DESC
     LIMIT ${pageSize + 1} OFFSET ${offset}
   `

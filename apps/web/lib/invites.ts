@@ -294,3 +294,43 @@ export async function declineOwnershipTransfer(truckId: string, decliningUserId:
   })
   if (result.count === 0) throw new Error('No pending ownership offer for you on this truck')
 }
+
+/**
+ * Admin-only escape hatch for a truck whose owner is unreachable (banned or
+ * already erased, blocked in the moderation queue — see
+ * lib/moderation-queue.ts). Mirrors acceptOwnershipTransfer's transaction but
+ * skips the offer/accept dance entirely, since the outgoing owner can't
+ * participate to consent. Still requires the target to already be an
+ * existing manager, same constraint as the normal flow. Caller (the admin
+ * server action) is responsible for requireAdmin() — this function performs
+ * no authorization check itself, same convention as setReviewVisibility.
+ */
+export async function adminReassignTruckOwner(truckId: string, newOwnerUserId: string): Promise<void> {
+  const truck = await db.truck.findUnique({ where: { id: truckId }, select: { ownerId: true } })
+  if (!truck) throw new Error('Truck not found')
+
+  const target = await db.truckOperator.findUnique({
+    where: { truckId_userId: { truckId, userId: newOwnerUserId } },
+  })
+  if (!target || target.role !== 'manager') {
+    throw new Error('Only an existing manager can be reassigned ownership')
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.truck.update({
+      where: { id: truckId },
+      data: { ownerId: newOwnerUserId, pendingOwnerId: null },
+    })
+    const promoted = await tx.truckOperator.updateMany({
+      where: { truckId, userId: newOwnerUserId, role: 'manager' },
+      data: { role: 'owner' },
+    })
+    const demoted = await tx.truckOperator.updateMany({
+      where: { truckId, userId: truck.ownerId, role: 'owner' },
+      data: { role: 'manager' },
+    })
+    if (promoted.count !== 1 || demoted.count !== 1) {
+      throw new Error('Ownership reassignment failed — team membership changed, please retry')
+    }
+  })
+}

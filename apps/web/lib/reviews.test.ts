@@ -116,6 +116,31 @@ describe('getVisibleReviewsForTruck', () => {
     })
   })
 
+  it('maps an erased author (userId null) to "Deleted user" with no avatar, keeping the review visible', async () => {
+    findMany.mockResolvedValue([reviewRow({ userId: null, user: null })])
+
+    const result = await getVisibleReviewsForTruck('t1')
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        userId: null,
+        userDisplayName: 'Deleted user',
+        userAvatarUrl: null,
+        body: 'Great!',
+        isVisible: true,
+      }),
+    )
+  })
+
+  it('does not confuse an erased author with a live user who simply has no display name set', async () => {
+    findMany.mockResolvedValue([reviewRow({ userId: 'u1', user: { displayName: null, avatarUrl: null } })])
+
+    const result = await getVisibleReviewsForTruck('t1')
+
+    expect(result[0]!.userId).toBe('u1')
+    expect(result[0]!.userDisplayName).toBeNull() // not "Deleted user"
+  })
+
   it('maps a review photo, including whether the viewer liked it', async () => {
     findMany.mockResolvedValue([
       reviewRow({
@@ -344,6 +369,34 @@ describe('getAllReviewsForAdmin', () => {
       moderatedAt: '2026-01-02T00:00:00.000Z',
       createdAt: '2026-01-01T00:00:00.000Z',
     })
+  })
+
+  it('maps an erased author (userId null, user null) to "Deleted user" with a null email, not a crash', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 'r1',
+        truckId: 't1',
+        userId: null,
+        rating: 5,
+        body: 'Great!',
+        isVisible: true,
+        moderationNote: null,
+        moderatedAt: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        truck: { slug: 'taco-kings', name: 'Taco Kings' },
+        user: null,
+        moderator: null,
+      },
+    ])
+
+    const result = await getAllReviewsForAdmin()
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        userDisplayName: 'Deleted user',
+        userEmail: null,
+      }),
+    )
   })
 
   it('maps a never-moderated review to null moderation fields', async () => {

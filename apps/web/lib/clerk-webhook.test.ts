@@ -3,6 +3,7 @@ import type { WebhookEvent } from '@clerk/nextjs/webhooks'
 
 const userCreate = vi.fn()
 const userUpdate = vi.fn()
+const inngestSend = vi.fn()
 
 vi.mock('@chomp/db', () => ({
   db: {
@@ -12,6 +13,7 @@ vi.mock('@chomp/db', () => ({
     },
   },
 }))
+vi.mock('@/inngest/client', () => ({ inngest: { send: inngestSend } }))
 
 const { handleClerkWebhookEvent } = await import('./clerk-webhook')
 
@@ -39,6 +41,7 @@ describe('handleClerkWebhookEvent', () => {
   beforeEach(() => {
     userCreate.mockReset()
     userUpdate.mockReset()
+    inngestSend.mockReset()
   })
 
   it('creates a user with the primary email, default role, and display name on user.created', async () => {
@@ -84,7 +87,7 @@ describe('handleClerkWebhookEvent', () => {
     })
   })
 
-  it('does not touch the database on user.deleted', async () => {
+  it('does not touch the database directly on user.deleted — hands off to the erasure Inngest job instead', async () => {
     const evt = {
       type: 'user.deleted',
       object: 'event',
@@ -94,6 +97,18 @@ describe('handleClerkWebhookEvent', () => {
     await expect(handleClerkWebhookEvent(evt)).resolves.toBeUndefined()
     expect(userCreate).not.toHaveBeenCalled()
     expect(userUpdate).not.toHaveBeenCalled()
+    expect(inngestSend).toHaveBeenCalledWith({ name: 'app/user.deleted', data: { clerkId: 'user_123' } })
+  })
+
+  it('skips sending the erasure event when the deleted payload has no id', async () => {
+    const evt = {
+      type: 'user.deleted',
+      object: 'event',
+      data: { deleted: true },
+    } as unknown as WebhookEvent
+
+    await expect(handleClerkWebhookEvent(evt)).resolves.toBeUndefined()
+    expect(inngestSend).not.toHaveBeenCalled()
   })
 
   it('ignores non-user event types', async () => {

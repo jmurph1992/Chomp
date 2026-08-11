@@ -85,6 +85,25 @@ describe('getFeedPage', () => {
     expect(queryRaw).toHaveBeenCalledTimes(1)
     expect(FEED_PAGE_SIZE).toBeGreaterThan(0)
   })
+
+  it('LEFT JOINs users, not an inner JOIN — an erased author must not silently drop the feed item', async () => {
+    queryRaw.mockResolvedValue([])
+    await getFeedPage(1)
+
+    const sql = (queryRaw.mock.calls.at(0)?.at(0) as string[]).join('')
+    expect(sql).toContain('LEFT JOIN users')
+    expect(sql).not.toMatch(/(?<!LEFT )JOIN users/)
+  })
+
+  it('maps a row from an erased author (userId null, authorDisplayName "Deleted user") through unchanged', async () => {
+    queryRaw.mockResolvedValue([row({ userId: null, authorDisplayName: 'Deleted user' })])
+
+    const result = await getFeedPage(1, 1)
+
+    expect(result.items[0]).toEqual(
+      expect.objectContaining({ userId: null, authorDisplayName: 'Deleted user' }),
+    )
+  })
 })
 
 describe('refreshFeedView', () => {

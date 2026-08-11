@@ -256,11 +256,16 @@ export type ReviewPhotoView = {
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
-/** A single review as shown on a truck's detail page. */
+/**
+ * A single review as shown on a truck's detail page. userId is nullable —
+ * null means the author was erased (see docs/features/account-erasure.md);
+ * the review is anonymized, not gone, and userDisplayName/userAvatarUrl are
+ * set to a "Deleted user" placeholder rather than omitted.
+ */
 export type ReviewView = {
   id: string
   truckId: string
-  userId: string
+  userId: string | null
   userDisplayName: string | null
   userAvatarUrl: string | null
   rating: number
@@ -275,14 +280,18 @@ export type ReviewSummary = {
   reviewCount: number
 }
 
-/** A review as shown in the admin moderation queue, across all trucks. */
+/**
+ * A review as shown in the admin moderation queue, across all trucks.
+ * userEmail is nullable for the same reason ReviewView.userId is — an
+ * erased author.
+ */
 export type AdminReviewView = {
   id: string
   truckId: string
   truckSlug: string
   truckName: string
   userDisplayName: string | null
-  userEmail: string
+  userEmail: string | null
   rating: number
   body: string | null
   isVisible: boolean
@@ -339,11 +348,12 @@ export type FavoriteMenuItemView = {
 
 export type FeedItemType = 'review' | 'photo'
 
+/** userId nullable — null means the author was erased; authorDisplayName is "Deleted user" in that case, not omitted. */
 export type FeedItem = {
   type: FeedItemType
   itemId: string
   truckId: string
-  userId: string
+  userId: string | null
   rating: number | null
   content: string | null
   imageUrl: string | null
@@ -351,4 +361,45 @@ export type FeedItem = {
   truckSlug: string
   truckName: string
   authorDisplayName: string | null
+}
+
+// ─── Account erasure & moderation ──────────────────────────────────────────────
+
+/** A user as shown in the admin user-management queue. */
+export type AdminUserView = {
+  id: string
+  email: string
+  displayName: string | null
+  role: 'customer' | 'operator' | 'admin'
+  ownedTruckCount: number
+  createdAt: string
+}
+
+export type ModerationQueueStatusValue = 'open' | 'resolved' | 'dismissed'
+export type ModerationQueueReasonValue = 'userErasureBlockedBySoleOwnership'
+
+/**
+ * An entry in the generic admin moderation queue. blockingTrucks is resolved
+ * live from the entry's stored truck ids, not read back verbatim — the ids
+ * themselves are a snapshot only, see docs/features/account-erasure.md.
+ */
+/** managers is who adminReassignTruckOwnerAction can hand the truck to — only an existing manager is eligible. */
+export type ModerationQueueEntryView = {
+  id: string
+  reason: ModerationQueueReasonValue
+  status: ModerationQueueStatusValue
+  subjectUserId: string | null
+  subjectEmail: string
+  subjectDisplayName: string | null
+  blockingTrucks: {
+    id: string
+    name: string
+    slug: string
+    managers: { userId: string; email: string; displayName: string | null }[]
+  }[]
+  note: string | null
+  createdAt: string
+  resolvedAt: string | null
+  resolvedByEmail: string | null
+  resolutionNote: string | null
 }

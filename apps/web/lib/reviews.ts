@@ -8,12 +8,12 @@ export { MAX_REVIEW_BODY_LENGTH, isValidReviewBody } from './review-validation'
 
 type ReviewRow = {
   id: string
-  userId: string
+  userId: string | null
   rating: number
   body: string | null
   isVisible: boolean
   createdAt: Date
-  user: { displayName: string | null; avatarUrl: string | null }
+  user: { displayName: string | null; avatarUrl: string | null } | null
   photos: {
     id: string
     url: string
@@ -27,14 +27,20 @@ type ReviewRow = {
 // below already know it (it's their own query's filter), and Review.truckId
 // is nullable at the DB level now (orphaned once a truck is deleted), which
 // these truck-scoped views never surface.
+//
+// Attribution keys off row.userId === null, not !row.user, so it can never be
+// confused with a live user who simply hasn't set a display name (that case
+// still falls through to the UI's own "Anonymous" fallback, unchanged) — see
+// docs/features/account-erasure.md. An erased author's review stays fully
+// visible, just anonymized, unlike an orphaned-truck review.
 function toReviewView(row: ReviewRow, truckId: string): ReviewView {
   const photo = row.photos[0]
   return {
     id: row.id,
     truckId,
     userId: row.userId,
-    userDisplayName: row.user.displayName,
-    userAvatarUrl: row.user.avatarUrl,
+    userDisplayName: row.userId === null ? 'Deleted user' : row.user?.displayName ?? null,
+    userAvatarUrl: row.userId === null ? null : (row.user?.avatarUrl ?? null),
     rating: row.rating,
     body: row.body,
     isVisible: row.isVisible,
@@ -185,8 +191,8 @@ export async function getAllReviewsForAdmin(): Promise<AdminReviewView[]> {
       truckId: row.truckId,
       truckSlug: row.truck.slug,
       truckName: row.truck.name,
-      userDisplayName: row.user.displayName,
-      userEmail: row.user.email,
+      userDisplayName: row.userId === null ? 'Deleted user' : (row.user?.displayName ?? null),
+      userEmail: row.user?.email ?? null,
       rating: row.rating,
       body: row.body,
       isVisible: row.isVisible,

@@ -45,13 +45,11 @@ DB access), same as `verificationStatus` on trucks (see
 what gates `/admin/trucks`, so there's currently no seeded admin user in the
 dev DB either.
 
-## Known gap: account deletion
+## Account deletion / erasure
 
-`user.deleted` webhooks are currently logged and otherwise ignored — the DB row is not
-deleted or soft-deleted. The `User` model has no cascade or soft-delete field yet, and a
-user can own trucks/reviews, so deleting the row isn't safe as-is. This needs a real
-design pass (hard delete vs. anonymize vs. soft-delete-and-hide) before launch. Tracked
-in `/go-live-requirements`.
+`user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing
+(not deleting) their reviews/photos and cascading their purely-personal data. See
+`/docs/features/account-erasure.md` for the full design.
 
 ## Testing
 

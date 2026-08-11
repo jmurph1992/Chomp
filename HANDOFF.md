@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-10
+2026-08-11
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), and a full customer-facing account page (profile + favorites + reviews) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) remains its own separate compliance question — the only intentionally-open item left on the whole roadmap besides mobile-first nav. The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), and a full customer-facing account page (profile + favorites + reviews) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now the only intentionally-open item left on the whole roadmap, and the user explicitly confirmed at the end of this session that it's next up — see `future-plans/roadmap.md`'s "App navigation — mobile-first" section for the standing direction and the candidate issues already scoped from the 2026-08-04 walkthrough (no persistent nav bar, no mobile nav pattern, no way back from a truck page to map/feed, no dashboard breadcrumbs). That list still needs a proper scoping pass (per `CLAUDE.md`'s "ask questions first" rule) before implementation — nothing about it has been designed yet, only flagged. The app is ready to run/deploy against real data.**
 
 ---
 
@@ -153,9 +153,8 @@ pnpm dev
    instead of a Vercel-Cron-style route; see "This session" below and
    `/docs/features/feed.md`. Still needs an Inngest Cloud app + sync once
    actually deployed — see item 17 below.
-8. **Account deletion / erasure handling** — `user.deleted` webhooks are currently a
-   no-op (see `/docs/features/auth.md` and `/go-live-requirements/auth.md`). Needs a
-   real decision before launch.
+8. ~~Account deletion / erasure handling~~ — **done 2026-08-11**, see "This session
+   (2026-08-11, account erasure)" below and `/docs/features/account-erasure.md`.
 9. ~~Review submission rate limiting~~ — **done 2026-08-04**, see "This session"
    below. ~~Real moderation queue~~ — **done 2026-08-05**, see "This session"
    below and `/go-live-requirements/reviews.md`.
@@ -196,10 +195,178 @@ pnpm dev
 20. ~~Account page, Phase 2 (favorites)~~ — **done 2026-08-10**, see
     "This session (2026-08-10, favorites)" below and
     `/docs/features/account.md#favorites`. With this, the account page's
-    full original vision is built. **Next up**: nothing prioritized — the
-    one remaining known gap is account deletion/erasure handling (roadmap
-    item 4, its own compliance decision, not a go-live blocker on its own).
-    Mobile-first nav (roadmap item 6) is the other open, unscoped item.
+    full original vision is built.
+21. ~~Account deletion / erasure handling~~ — **done 2026-08-11**, see "This
+    session (2026-08-11, account erasure)" below and
+    `/docs/features/account-erasure.md`. With this, every item on the
+    original numbered Open Items list is done. **Next up**: nothing
+    prioritized — mobile-first nav (roadmap item 6) is the one remaining
+    open, unscoped item on the whole roadmap.
+
+## This session (2026-08-11, account erasure)
+- **Closed roadmap item 4 ("Account deletion / erasure handling")** — the last
+  remaining item on the original numbered Open Items list. See
+  `/docs/features/account-erasure.md` for the full design writeup.
+- **Product decisions locked in through extended discussion before any code
+  was written** (per `CLAUDE.md`'s "ask questions first" rule, across several
+  rounds): reviews/photos are **anonymized, not deleted** (content stays
+  visible, "Deleted user" attribution — mirrors the existing orphaned-review
+  pattern from truck deletion); the `User` row is **hard-deleted**, not
+  soft-deleted-and-PII-scrubbed (rejected my own first recommendation on this
+  one after the user pushed back asking for "the correct way, not the
+  laziest" — a retained scrubbed row risks a future PII column being
+  forgotten in the scrub path forever, an actually-deleted row can't leak a
+  column that doesn't exist); a user who's the **sole owner of a truck is
+  never auto-resolved** (no silently promoting a manager to owner — would
+  violate the explicit-consent principle already established for voluntary
+  ownership transfer), blocked and routed to a new **generic** admin
+  moderation queue instead (the user's explicit choice over a narrow
+  single-purpose table); plus four follow-up decisions from plan review: build
+  the admin escape-hatch tools (`adminDeleteTruckAction`/
+  `adminReassignTruckOwner`) the queue needs to actually be resolvable
+  (without them a blocked entry would be a dead end — no one has a live
+  session to invoke the normal transfer/delete flows once the owner is
+  banned/erased); keep a minimal permanent, non-PII `ErasureRecord`
+  (`sha256(email)` + trigger + timestamp) proving a specific request was
+  honored; block admin-on-admin deletion (admin accounts aren't self-service
+  anywhere else in this app); add a separate `dismissModerationEntry` path
+  that restores an account (reactivate trucks, unban) instead of always
+  completing the erasure.
+- **Migration `20260811211442_account_erasure`**, applied to the Neon dev DB
+  after showing the user the exact generated SQL and getting explicit
+  approval (per `CLAUDE.md`'s migration rule): `reviews.user_id`/
+  `review_photos.user_id`/`truck_invites.created_by_user_id` made nullable
+  (`ON DELETE SET NULL`, mirrors the existing `truckId` orphaning pattern
+  exactly); `truck_operators.user_id`/`photo_likes.user_id` → `ON DELETE
+  CASCADE` (purely personal, same bucket as favorites' existing cascade);
+  new `moderation_queue_entries`/`erasure_records` tables + 3 new enums. No
+  backfill. **`trucks.owner_id` deliberately untouched** — still required,
+  still `RESTRICT` — the actual DB-level backstop that a truck can never end
+  up ownerless, everything else exists to give a good UX/queue *before*
+  hitting that wall, not to replace it.
+- **A real modeling catch during the migration diff, not assumed**: two
+  existing nullable FKs (`Review.moderatedByUserId`,
+  `TruckInvite.acceptedByUserId`) had no `onDelete` written in the schema at
+  all. Assumed at first this meant they defaulted to `RESTRICT` like every
+  *required* FK in this app — generating the migration off an explicit
+  `onDelete: SetNull` annotation on both produced **zero DDL change**,
+  revealing Prisma's actual implicit default for an *optional* relation is
+  already `SetNull`. Comments corrected to state this accurately rather than
+  leave the wrong claim in the schema.
+- **New `apps/web/lib/user-erasure.ts`**: `findUserByClerkId`,
+  `findSoleOwnedTrucks` (a truck has exactly one owner by schema design, so
+  "sole owner" and "owner" are the same check — the "sole" framing is about
+  what it implies, not a multiplicity check), `deactivateTrucks`/
+  `reactivateTrucks` (same `isActive` field truck verification already
+  uses), `eraseUserRow` (one `$transaction`: delete the `User` row + write
+  the `ErasureRecord`; classifies `trigger` from durable DB state — a
+  resolved `ModerationQueueEntry` for the subject — rather than tagging
+  whichever caller's Inngest event happens to win a race, which would be
+  genuinely racy since self-service/admin/webhook sends can all fire near-
+  simultaneously; idempotent, swallows Prisma P2025 as a retried/duplicate
+  event, not an error).
+- **New `apps/web/lib/moderation-queue.ts`**: the generic queue's CRUD +
+  audit-writing primitive, mirroring `lib/reviews.ts#setReviewVisibility`'s
+  shape. `openErasureBlockedEntry` is idempotent (no duplicate open entry per
+  subject+reason — a re-delivered webhook or resent event can't spam it).
+  `resolveModerationEntry` re-verifies `findSoleOwnedTrucks` live, never
+  trusts the entry's stored `blockingTruckIds` snapshot; on success attempts
+  `deleteClerkUser` (swallows a 404 — already deleted directly) and *always*
+  also sends the erasure event directly regardless of that outcome, since a
+  webhook won't re-fire for an account Clerk already knows is gone.
+  `dismissModerationEntry` is the full opposite path: reactivate + unban,
+  never triggers erasure.
+- **New `apps/web/lib/clerk-admin.ts`**: the only file in the app allowed to
+  call `@clerk/nextjs/server`'s `clerkClient()` directly (`banClerkUser`/
+  `unbanClerkUser`/`deleteClerkUser`) — first use of Clerk's Backend API
+  anywhere in this codebase. Reuses the existing `CLERK_SECRET_KEY`, no new
+  env var, but that key now grants destructive account operations it didn't
+  functionally exercise before — flagged in `.env.example`.
+- **`lib/review-photos.ts#removeAllPhotoLikesForUser`**: batch version of
+  `unlikePhoto`'s per-row decrement, run explicitly before `db.user.delete()`
+  — `PhotoLike.userId`'s new `Cascade` would remove the rows on its own, but
+  silently without ever touching `ReviewPhoto.likesCount`, desyncing the
+  denormalized counter.
+- **`lib/reviews.ts`/`lib/feed.ts` updated for anonymized attribution**:
+  `toReviewView` keys off `userId === null` (not `!user`) so an erased author
+  is never confused with a live user who simply has no `displayName` set —
+  renders "Deleted user"/no avatar either way, review stays fully visible.
+  `getFeedPage`'s raw SQL had a real, previously-latent bug caught here: `JOIN
+  users` was an **inner** join, which would have silently dropped a feed item
+  the moment its author got erased — the opposite of this feature's whole
+  "content stays visible" premise. Fixed to `LEFT JOIN` with a `CASE WHEN
+  user_id IS NULL THEN 'Deleted user'` fallback.
+- **`lib/invites.ts#adminReassignTruckOwner`**: the admin-only escape hatch a
+  blocked/held truck actually needs to become resolvable — mirrors
+  `acceptOwnershipTransfer`'s transaction exactly but skips the offer/accept
+  dance, since the outgoing owner (banned or already erased) can't
+  participate to consent. Still requires the target to already be an
+  existing manager, same constraint as the normal flow.
+- **First event-triggered Inngest function** in this codebase (the feed
+  refresh is cron-only): `eraseUserFunction`/`eraseUserHandler`
+  (`apps/web/inngest/functions.ts`), triggered on `app/user.deleted`, sent
+  from `lib/clerk-webhook.ts`'s `user.deleted` case (previously a
+  `console.warn` no-op stub) and from `resolveModerationEntry`. Registered in
+  `app/api/inngest/route.ts`'s `functions` array.
+- **New admin surfaces — this app's first-ever in-app admin
+  user-management UI**: `/admin/users` (list + owner-only-aware delete, blocks
+  admin targets) and `/admin/moderation` (per-entry blocking-truck actions —
+  delete or reassign each one inline — plus Resolve/Dismiss), both under the
+  existing `requireAdmin()`-gated `/admin` layout, nav links added. New
+  `app/actions/admin-users.ts` (kept separate from `admin.ts` to stay
+  focused): `deleteUserAction`, `resolveModerationEntryAction`,
+  `dismissModerationEntryAction`, `adminDeleteTruckAction`,
+  `adminReassignTruckOwnerAction`.
+- **Self-serve**: `/account` gained a "Delete my account" danger-zone section
+  (`components/account/delete-account-section.tsx`, mirrors
+  `delete-truck-section.tsx`'s type-to-confirm pattern, confirming email
+  instead of a truck name). `deleteOwnAccountAction`
+  (`app/actions/account.ts`) never accepts a target `userId` — operates only
+  on the caller's own session, eliminating the IDOR surface by construction.
+  Clerk's embedded `<UserProfile />` also has its own built-in delete-account
+  button with no per-component way to hide just that section — the user
+  **turned off Clerk's instance-level "allow users to delete their account"
+  toggle directly in the Clerk Dashboard this session** (User & authentication
+  → User model → User permissions), confirmed live, so `DeleteAccountSection`
+  is now the only in-app path. That toggle doesn't cover an admin deleting a
+  user from the Clerk Dashboard's own Users page — a separate action — which
+  is exactly why the erasure job's sole-ownership check holds/queues
+  defensively regardless of which path triggered the webhook.
+- **Tests**: new `lib/user-erasure.test.ts` (10), `lib/moderation-queue.test.ts`
+  (13), `lib/clerk-admin.test.ts` (3), `app/actions/admin-users.test.ts` (14),
+  `app/actions/account.test.ts` (5); extended `lib/review-photos.test.ts`,
+  `lib/reviews.test.ts`, `lib/feed.test.ts`, `lib/clerk-webhook.test.ts`,
+  `lib/invites.test.ts`, `inngest/functions.test.ts`. Full `pnpm --filter
+  @chomp/web test`: 361/361 passing (up from 297). Full `pnpm type-check`
+  across all packages: clean. Real `pnpm build`: clean (re-confirmed no
+  client-bundle leak — the `node:crypto`/Clerk-backend-SDK class of bug that
+  bit the truck-deletion session twice didn't recur here); reverted the
+  incidental `tsconfig.json` mutation, same as every prior session.
+- **Real-DB verification** (throwaway script, same pattern as prior
+  cascade-verification sessions, deleted after use): Scenario A — a user with
+  reviews/likes/a manager role/a sent invite but no owned truck, erased,
+  confirmed `Review`/`ReviewPhoto` survive with `userId NULL` and
+  `likesCount` still correct, `TruckOperator`/`PhotoLike` gone,
+  `TruckInvite.createdByUserId` `NULL`, `User` row gone, `ErasureRecord`
+  written (`trigger: 'direct'`). Scenario B — a sole truck owner, blocked
+  (truck deactivated, `ModerationQueueEntry` opened idempotently — a
+  duplicate call didn't create a second entry), resolved via
+  `adminReassignTruckOwner` + a direct erasure re-run, completed with
+  `trigger: 'resolvedFromModerationQueue'` correctly referencing the entry.
+  Confirmed zero leftover rows afterward.
+- **Not yet done / next session**: none of this session's changes are
+  committed to git yet — left as unstaged for review, same pattern as prior
+  sessions. Clerk's instance-level self-serve-deletion toggle is now off
+  (confirmed live in the Clerk Dashboard, see above) — the one remaining gap
+  is a full signed-in click-through of the self-serve delete flow and the
+  admin block/resolve/dismiss UI (no Chrome browser session was
+  available in this environment — same gap already flagged for every other
+  Clerk-dependent interactive flow in this project's history). The real Clerk
+  Backend API calls (`banClerkUser`/`unbanClerkUser`/`deleteClerkUser`) are
+  covered by mocked unit tests only, never exercised against a real Clerk
+  test account. With this session, every item on the original numbered Open
+  Items list is done — mobile-first nav (roadmap item 6) is the only
+  intentionally-open, unscoped item left on the whole roadmap.
 
 ## This session (2026-08-10, favorites)
 - **Closed roadmap item 7, Phase 2 ("Account page — favorites")** — see
@@ -1229,6 +1396,7 @@ pnpm dev
 | `20260810203148_add_truck_pending_owner` | Adds `trucks.pending_owner_id` (FK → `users.id`, `ON DELETE SET NULL`) — no backfill | Yes (applied 2026-08-10) |
 | `20260810210840_truck_deletion_cascades` | `onDelete: Cascade` on `TruckOperator`/`TruckLocation`/`TruckSchedule`/`MenuCategory`/`MenuItem`/`TruckEvent`'s FKs to `Truck`; `reviews.truck_id`/`review_photos.truck_id` made nullable with `ON DELETE SET NULL` — no backfill | Yes (applied 2026-08-10) |
 | `20260810223526_add_favorites` | New `truck_favorites`/`menu_item_favorites` tables (composite PK, both FKs `ON DELETE CASCADE`) — no backfill | Yes (applied 2026-08-10) |
+| `20260811211442_account_erasure` | `reviews.user_id`/`review_photos.user_id`/`truck_invites.created_by_user_id` made nullable (`ON DELETE SET NULL`); `truck_operators.user_id`/`photo_likes.user_id` → `ON DELETE CASCADE`; new `moderation_queue_entries`/`erasure_records` tables + 3 new enums — no backfill | Yes (applied 2026-08-11) |
 
 ---
 

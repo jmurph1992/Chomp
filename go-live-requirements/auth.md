@@ -1,8 +1,7 @@
 # Auth — go-live requirements
 
-- **Account deletion / erasure handling.** `user.deleted` Clerk webhooks are currently
-  logged and no-op'd (see `/docs/features/auth.md#known-gap-account-deletion`). Before
-  launch we need a real decision on what happens to a deleted user's trucks, reviews,
-  and photos — hard delete, anonymize, or soft-delete-and-hide — and the schema/webhook
-  changes to implement it. Matters for GDPR/CCPA-style "delete my account" requests at
-  national scale.
+- ~~Account deletion / erasure handling~~ — **done**, see
+  `/docs/features/account-erasure.md`. Reviews/photos are anonymized (kept visible,
+  "Deleted user"); the `User` row is hard-deleted via an Inngest job; a user who's the
+  sole owner of a truck is blocked and routed to a generic admin moderation queue
+  rather than auto-resolved.

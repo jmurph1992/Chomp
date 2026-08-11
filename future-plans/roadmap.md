@@ -32,11 +32,13 @@ for the first time in the stack, ahead of its other documented uses
 - ~~R2 bucket lifecycle rule for orphaned/un-finalized uploads~~ — done
   2026-08-07, see the prioritized list below
 
-## 4. Compliance before real users
-Account deletion / erasure handling — `user.deleted` webhooks are currently a
-no-op. Needs a real product decision (hard delete vs. anonymize vs.
-soft-delete-and-hide) before this can handle a GDPR/CCPA-style request at
-national scale.
+## 4. Compliance before real users — done 2026-08-11
+~~Account deletion / erasure handling~~ — see `/docs/features/account-erasure.md`.
+Reviews/photos are anonymized (kept, "Deleted user"); the `User` row is
+hard-deleted via an Inngest job triggered off the `user.deleted` webhook; a
+user who's the sole owner of a truck is blocked (never auto-resolved) and
+routed to a new generic admin moderation queue, which also became the first
+in-app admin user-management surface (`/admin/users`) this app has ever had.
 
 ## 5. Deferred stack pieces
 Sentry, Resend, Stripe — each presumably gets wired up at its own natural

@@ -3,8 +3,10 @@ import { UserProfile } from '@clerk/nextjs'
 import { getCurrentUser } from '@/lib/auth'
 import { getReviewsForUser } from '@/lib/reviews'
 import { getFavoriteMenuItemsForUser, getFavoriteTrucksForUser } from '@/lib/favorites'
+import { findSoleOwnedTrucks } from '@/lib/user-erasure'
 import { MyReviews } from '@/components/account/my-reviews'
 import { MyFavorites } from '@/components/account/my-favorites'
+import { DeleteAccountSection } from '@/components/account/delete-account-section'
 
 /**
  * Catch-all route (not a stylistic choice) — Clerk's <UserProfile /> has its
@@ -21,10 +23,11 @@ export default async function AccountPage() {
   const user = await getCurrentUser()
   if (!user) notFound()
 
-  const [reviews, favoriteTrucks, favoriteMenuItems] = await Promise.all([
+  const [reviews, favoriteTrucks, favoriteMenuItems, blockingTrucks] = await Promise.all([
     getReviewsForUser(user.id),
     getFavoriteTrucksForUser(user.id),
     getFavoriteMenuItemsForUser(user.id),
+    findSoleOwnedTrucks(user.id),
   ])
 
   return (
@@ -44,6 +47,8 @@ export default async function AccountPage() {
           <MyReviews reviews={reviews} />
         </div>
       </section>
+
+      <DeleteAccountSection userEmail={user.email} blockingTrucks={blockingTrucks} />
     </main>
   )
 }

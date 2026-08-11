@@ -1,5 +1,6 @@
 import type { WebhookEvent } from '@clerk/nextjs/webhooks'
 import { db } from '@chomp/db'
+import { inngest } from '@/inngest/client'
 
 /**
  * Handles a verified Clerk webhook event by syncing it into the `users` table.
@@ -32,11 +33,14 @@ export async function handleClerkWebhookEvent(evt: WebhookEvent): Promise<void> 
       break
 
     case 'user.deleted':
-      // Known gap: we don't delete or soft-delete the DB row here because a user
-      // can own trucks/reviews and the schema has no cascade or soft-delete field
-      // yet. Tracked in /go-live-requirements — for now we just log so the event
-      // isn't silently swallowed.
-      console.warn(`Clerk user.deleted received for ${evt.data.id ?? 'unknown'} — no-op`)
+      // Hands off to the account-erasure Inngest job (apps/web/inngest/functions.ts
+      // #eraseUserFunction) rather than erasing inline here — erasure is a
+      // multi-step, potentially-held (sole-truck-ownership) operation, not a
+      // simple sync. See docs/features/account-erasure.md. evt.data.id is typed
+      // optional for this event; skip rather than send a garbage clerkId.
+      if (evt.data.id) {
+        await inngest.send({ name: 'app/user.deleted', data: { clerkId: evt.data.id } })
+      }
       break
 
     default:

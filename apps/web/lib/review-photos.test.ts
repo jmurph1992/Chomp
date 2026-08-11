@@ -8,6 +8,7 @@ const photoDelete = vi.fn()
 const photoUpdate = vi.fn()
 const likeDeleteMany = vi.fn()
 const likeCreate = vi.fn()
+const likeFindMany = vi.fn()
 const ingestUploadedImage = vi.fn()
 const deleteCloudflareImage = vi.fn()
 const extractCloudflareImageId = vi.fn()
@@ -30,14 +31,21 @@ vi.mock('@chomp/db', () => ({
       delete: photoDelete,
       update: photoUpdate,
     },
-    photoLike: { deleteMany: likeDeleteMany, create: likeCreate },
+    photoLike: { deleteMany: likeDeleteMany, create: likeCreate, findMany: likeFindMany },
     $transaction: transaction,
   },
 }))
 vi.mock('./storage', () => ({ ingestUploadedImage, deleteCloudflareImage, extractCloudflareImageId }))
 
-const { attachReviewPhoto, deleteReviewPhoto, likePhoto, unlikePhoto, isValidCaption, MAX_CAPTION_LENGTH } =
-  await import('./review-photos')
+const {
+  attachReviewPhoto,
+  deleteReviewPhoto,
+  likePhoto,
+  unlikePhoto,
+  removeAllPhotoLikesForUser,
+  isValidCaption,
+  MAX_CAPTION_LENGTH,
+} = await import('./review-photos')
 
 beforeEach(() => {
   reviewFindUnique.mockReset()
@@ -48,6 +56,7 @@ beforeEach(() => {
   photoUpdate.mockReset().mockResolvedValue({})
   likeDeleteMany.mockReset()
   likeCreate.mockReset().mockResolvedValue({})
+  likeFindMany.mockReset()
   transaction.mockReset().mockImplementation((callback: (txArg: typeof tx) => unknown) => callback(tx))
   ingestUploadedImage.mockReset()
   deleteCloudflareImage.mockReset()
@@ -194,6 +203,39 @@ describe('unlikePhoto', () => {
     likeDeleteMany.mockResolvedValue({ count: 0 })
 
     await unlikePhoto('t1', 'p1', 'u1')
+
+    expect(photoUpdate).not.toHaveBeenCalled()
+  })
+})
+
+describe('removeAllPhotoLikesForUser', () => {
+  it('no-ops when the user has no likes', async () => {
+    likeFindMany.mockResolvedValue([])
+
+    await removeAllPhotoLikesForUser('u1')
+
+    expect(likeDeleteMany).not.toHaveBeenCalled()
+    expect(photoUpdate).not.toHaveBeenCalled()
+  })
+
+  it('decrements once per removed like, across multiple photos', async () => {
+    likeFindMany.mockResolvedValue([{ photoId: 'p1' }, { photoId: 'p2' }])
+    likeDeleteMany.mockResolvedValue({ count: 1 })
+
+    await removeAllPhotoLikesForUser('u1')
+
+    expect(likeDeleteMany).toHaveBeenCalledWith({ where: { photoId: 'p1', userId: 'u1' } })
+    expect(likeDeleteMany).toHaveBeenCalledWith({ where: { photoId: 'p2', userId: 'u1' } })
+    expect(photoUpdate).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { likesCount: { decrement: 1 } } })
+    expect(photoUpdate).toHaveBeenCalledWith({ where: { id: 'p2' }, data: { likesCount: { decrement: 1 } } })
+    expect(photoUpdate).toHaveBeenCalledTimes(2)
+  })
+
+  it('is safe to call twice — a like already removed by a prior/concurrent call is skipped, not decremented again', async () => {
+    likeFindMany.mockResolvedValue([{ photoId: 'p1' }])
+    likeDeleteMany.mockResolvedValue({ count: 0 }) // already gone
+
+    await removeAllPhotoLikesForUser('u1')
 
     expect(photoUpdate).not.toHaveBeenCalled()
   })

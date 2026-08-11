@@ -1,6 +1,6 @@
 import { serve } from 'inngest/next'
 import { inngest } from '@/inngest/client'
-import { refreshFeedFunction } from '@/inngest/functions'
+import { eraseUserFunction, refreshFeedFunction } from '@/inngest/functions'
 
 /**
  * Inngest's own handler for function execution, registration, and its
@@ -10,5 +10,5 @@ import { refreshFeedFunction } from '@/inngest/functions'
  */
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [refreshFeedFunction],
+  functions: [refreshFeedFunction, eraseUserFunction],
 })

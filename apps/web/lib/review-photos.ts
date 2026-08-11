@@ -96,3 +96,22 @@ export async function unlikePhoto(truckId: string, photoId: string, userId: stri
 
   await db.reviewPhoto.update({ where: { id: photoId }, data: { likesCount: { decrement: 1 } } })
 }
+
+/**
+ * Removes every like a user has left, decrementing each photo's likesCount
+ * exactly once per removed like. Used by the account-erasure job before
+ * db.user.delete() — PhotoLike.userId has onDelete: Cascade for the ordinary
+ * case, but a raw DB cascade would remove the rows without ever touching the
+ * denormalized counter, silently desyncing it. Same per-row idempotent shape
+ * as unlikePhoto, batched: naturally safe to retry, since a re-run only finds
+ * whatever likes are still left.
+ */
+export async function removeAllPhotoLikesForUser(userId: string): Promise<void> {
+  const likes = await db.photoLike.findMany({ where: { userId }, select: { photoId: true } })
+
+  for (const { photoId } of likes) {
+    const result = await db.photoLike.deleteMany({ where: { photoId, userId } })
+    if (result.count === 0) continue // already removed by a concurrent/retried call
+    await db.reviewPhoto.update({ where: { id: photoId }, data: { likesCount: { decrement: 1 } } })
+  }
+}

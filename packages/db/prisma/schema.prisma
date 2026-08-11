@@ -47,6 +47,33 @@ enum InviteStatus {
   expired
 }
 
+/// Which condition put an entry in the moderation queue. Only one reason exists so
+/// far (a user's account erasure is blocked because they're the sole owner of at
+/// least one truck) but the table is deliberately generic — see ModerationQueueEntry.
+enum ModerationQueueReason {
+  userErasureBlockedBySoleOwnership
+}
+
+/// open: needs an admin to act. resolved: the blocker cleared and the held action
+/// (e.g. erasure) completed. dismissed: an admin decided NOT to complete the held
+/// action — the subject's blocking trucks are reactivated and (for erasure) their
+/// Clerk account is unbanned, restoring them rather than erasing them.
+enum ModerationQueueStatus {
+  open
+  resolved
+  dismissed
+}
+
+/// direct: the webhook fired and nothing was held — self-service deletion, an
+/// admin's non-blocked deletion, or a deletion made directly in Clerk's dashboard
+/// are all indistinguishable from our side, and don't need to be distinguished for
+/// this record's purpose. resolvedFromModerationQueue: the erasure had been held
+/// pending a ModerationQueueEntry resolution.
+enum ErasureTrigger {
+  direct
+  resolvedFromModerationQueue
+}
+
 // ─── Users ───────────────────────────────────────────────────────────────────
 
 /// Mirrors Clerk users into the DB for relational data.
@@ -60,17 +87,19 @@ model User {
   avatarUrl   String?  @map("avatar_url")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  ownedTrucks        Truck[]            @relation("TruckOwner")
-  pendingOwnedTrucks Truck[]            @relation("TruckPendingOwner")
-  truckOperators     TruckOperator[]
-  reviews            Review[]
-  reviewPhotos       ReviewPhoto[]
-  photoLikes         PhotoLike[]
-  moderatedReviews   Review[]           @relation("ReviewModerator")
-  sentInvites        TruckInvite[]      @relation("InviteCreatedBy")
-  acceptedInvites    TruckInvite[]      @relation("InviteAcceptedBy")
-  truckFavorites     TruckFavorite[]
-  menuItemFavorites  MenuItemFavorite[]
+  ownedTrucks                      Truck[]                @relation("TruckOwner")
+  pendingOwnedTrucks               Truck[]                @relation("TruckPendingOwner")
+  truckOperators                   TruckOperator[]
+  reviews                          Review[]
+  reviewPhotos                     ReviewPhoto[]
+  photoLikes                       PhotoLike[]
+  moderatedReviews                 Review[]               @relation("ReviewModerator")
+  sentInvites                      TruckInvite[]          @relation("InviteCreatedBy")
+  acceptedInvites                  TruckInvite[]          @relation("InviteAcceptedBy")
+  truckFavorites                   TruckFavorite[]
+  menuItemFavorites                MenuItemFavorite[]
+  moderationQueueEntriesAsSubject  ModerationQueueEntry[] @relation("ModerationQueueSubject")
+  moderationQueueEntriesAsResolver ModerationQueueEntry[] @relation("ModerationQueueResolvedBy")
 
   @@map("users")
 }
@@ -80,7 +109,7 @@ model User {
 /// Core truck profile. One truck can have multiple operators (owner + managers).
 model Truck {
   id                 String             @id @default(uuid())
-  ownerId            String             @map("owner_id")
+  ownerId            String             @map("owner_id") // required, RESTRICT on delete — see owner relation below
   pendingOwnerId     String?            @map("pending_owner_id") // set while an owner-initiated transfer awaits the target manager's accept/decline
   name               String
   slug               String             @unique // SEO-friendly URL: /trucks/taco-kings
@@ -96,6 +125,12 @@ model Truck {
   isActive           Boolean            @default(true) @map("is_active")
   createdAt          DateTime           @default(now()) @map("created_at")
 
+  // Deliberately left required + RESTRICT (unlike every other FK to User touched by
+  // account erasure) — this is the DB-level backstop that guarantees a truck can
+  // never end up ownerless: Postgres itself refuses `DELETE FROM users` for a sole
+  // owner regardless of what application code does or forgets to do. The app-level
+  // sole-ownership check in lib/user-erasure.ts exists to give a good UX and a
+  // moderation queue *before* ever hitting this wall, not to replace it.
   owner          User            @relation("TruckOwner", fields: [ownerId], references: [id])
   pendingOwner   User?           @relation("TruckPendingOwner", fields: [pendingOwnerId], references: [id])
   operators      TruckOperator[]
@@ -119,7 +154,11 @@ model TruckOperator {
   role    OperatorRole @default(owner)
 
   truck Truck @relation(fields: [truckId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id])
+  // Cascade: a manager/owner role is purely personal to the user holding it — no
+  // third-party interest in keeping it once they're erased, same bucket as
+  // TruckFavorite/MenuItemFavorite below. (Truck.ownerId itself is a separate,
+  // required, non-cascading FK — see its own comment for why.)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([truckId, userId])
   @@map("truck_operators")
@@ -135,15 +174,19 @@ model TruckInvite {
   invitedEmail     String       @map("invited_email")
   token            String       @unique
   status           InviteStatus @default(pending)
-  createdByUserId  String       @map("created_by_user_id")
+  createdByUserId  String?      @map("created_by_user_id") // nullable: SetNull when the creator is erased — the invite record itself outlives them
   createdAt        DateTime     @default(now()) @map("created_at")
   expiresAt        DateTime     @map("expires_at")
   acceptedAt       DateTime?    @map("accepted_at")
   acceptedByUserId String?      @map("accepted_by_user_id")
 
   truck          Truck @relation(fields: [truckId], references: [id], onDelete: Cascade)
-  createdBy      User  @relation("InviteCreatedBy", fields: [createdByUserId], references: [id])
-  acceptedByUser User? @relation("InviteAcceptedBy", fields: [acceptedByUserId], references: [id])
+  createdBy      User? @relation("InviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  // Was already nullable with no onDelete written — Prisma's implicit default for an
+  // optional relation is already SetNull (confirmed: generating a migration off this
+  // explicit annotation produced no DDL change), so this makes existing behavior
+  // explicit rather than changing it.
+  acceptedByUser User? @relation("InviteAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
 
   @@index([truckId, status])
   @@map("truck_invites")
@@ -238,7 +281,7 @@ model MenuItem {
 model Review {
   id                String    @id @default(uuid())
   truckId           String?   @map("truck_id") // null means the truck was deleted — the review is orphaned, kept for record-keeping, invisible everywhere in the product (no "my reviews" page yet)
-  userId            String    @map("user_id")
+  userId            String?   @map("user_id") // null means the author was erased — the review is anonymized (kept, "Deleted user"), never invisible like an orphaned-truck review
   rating            Int // 1-5; validated in API before write
   body              String?
   isVisible         Boolean   @default(true) @map("is_visible")
@@ -248,8 +291,10 @@ model Review {
   createdAt         DateTime  @default(now()) @map("created_at")
 
   truck     Truck?        @relation(fields: [truckId], references: [id], onDelete: SetNull)
-  user      User          @relation(fields: [userId], references: [id])
-  moderator User?         @relation("ReviewModerator", fields: [moderatedByUserId], references: [id])
+  user      User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  // Was already nullable with no onDelete written — same implicit-SetNull default as
+  // TruckInvite.acceptedByUser above, made explicit rather than changed.
+  moderator User?         @relation("ReviewModerator", fields: [moderatedByUserId], references: [id], onDelete: SetNull)
   photos    ReviewPhoto[]
 
   @@unique([truckId, userId])
@@ -262,7 +307,7 @@ model Review {
 model ReviewPhoto {
   id         String   @id @default(uuid())
   reviewId   String   @map("review_id")
-  userId     String   @map("user_id")
+  userId     String?  @map("user_id") // null means the author was erased — see Review.userId
   truckId    String?  @map("truck_id") // null means the truck was deleted — see Review.truckId
   url        String
   caption    String?
@@ -271,7 +316,7 @@ model ReviewPhoto {
   createdAt  DateTime @default(now()) @map("created_at")
 
   review Review      @relation(fields: [reviewId], references: [id])
-  user   User        @relation(fields: [userId], references: [id])
+  user   User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   truck  Truck?      @relation(fields: [truckId], references: [id], onDelete: SetNull)
   likes  PhotoLike[]
 
@@ -284,8 +329,16 @@ model PhotoLike {
   userId    String   @map("user_id")
   createdAt DateTime @default(now()) @map("created_at")
 
+  // photoId stays RESTRICT deliberately — see lib/review-photos.ts, likes must be
+  // removed before a ReviewPhoto can be deleted, no cascade shortcut there.
   photo ReviewPhoto @relation(fields: [photoId], references: [id])
-  user  User        @relation(fields: [userId], references: [id])
+  // Cascade: a like is purely personal, no third-party interest in keeping it once
+  // the liker is erased — same bucket as TruckOperator above and the favorites
+  // tables below. Note: raw cascade removes the row but does NOT decrement the
+  // liked photo's denormalized likesCount — lib/user-erasure.ts's erasure job must
+  // call lib/review-photos.ts#removeAllPhotoLikesForUser explicitly first so the
+  // counter stays correct; see that function's doc comment.
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([photoId, userId])
   @@map("photo_likes")
@@ -343,4 +396,66 @@ model TruckEvent {
   truck Truck @relation(fields: [truckId], references: [id], onDelete: Cascade)
 
   @@map("truck_events")
+}
+
+// ─── Account erasure & moderation ────────────────────────────────────────────
+
+/// Generic admin queue for conditions this app can't safely automate. Currently
+/// fed by exactly one trigger — a user's account erasure blocked because they're
+/// the sole owner of at least one truck — but the shape (subject snapshot, reason,
+/// status, resolution audit trail) is deliberately generic, not hardcoded to that
+/// one case, so a future trigger (e.g. user-reported content) can reuse this table.
+/// subjectUserId/resolvedByUserId are nullable + SetNull, same pattern as
+/// Review.userId/moderatedByUserId — an entry must outlive the users it references,
+/// since the whole point of the erasure-blocked reason is that the subject
+/// eventually gets erased once the entry is resolved. subjectEmail/
+/// subjectDisplayName are a point-in-time snapshot captured at creation, never
+/// re-derived from the live User row, which may be gone by the time an admin reads
+/// a resolved entry. blockingTruckIds is a plain scalar array (Prisma has no
+/// relation-array-to-scalar-array construct, and this app already uses native
+/// Postgres arrays for comparable shapes — see Truck.cuisineType/MenuItem.dietaryFlags)
+/// — it is a snapshot only, never trusted as still-accurate: resolution always
+/// re-derives the live blocking set instead of reading this column.
+model ModerationQueueEntry {
+  id                 String                @id @default(uuid())
+  reason             ModerationQueueReason
+  status             ModerationQueueStatus @default(open)
+  subjectUserId      String?               @map("subject_user_id")
+  subjectEmail       String                @map("subject_email")
+  subjectDisplayName String?               @map("subject_display_name")
+  blockingTruckIds   String[]              @map("blocking_truck_ids")
+  note               String?
+  createdAt          DateTime              @default(now()) @map("created_at")
+  resolvedAt         DateTime?             @map("resolved_at")
+  resolvedByUserId   String?               @map("resolved_by_user_id")
+  resolutionNote     String?               @map("resolution_note")
+
+  subjectUser    User?           @relation("ModerationQueueSubject", fields: [subjectUserId], references: [id], onDelete: SetNull)
+  resolvedByUser User?           @relation("ModerationQueueResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  erasureRecords ErasureRecord[]
+
+  @@index([status, reason])
+  @@map("moderation_queue_entries")
+}
+
+/// The only thing that survives a completed account erasure — proof a specific
+/// request was honored, without retaining the PII that made it identifiable.
+/// emailHash is sha256(lowercased email), never the plaintext, so a future dispute
+/// ("did you actually delete my account?") can be checked by re-hashing a
+/// claimed email and comparing, without this table itself being a second place
+/// personal data lives on. trigger is classified deterministically at erasure
+/// time (was there a resolved ModerationQueueEntry for this subject or not) —
+/// never inferred from which caller's event happened to win a race, since
+/// self-service deletion, an admin's non-blocked deletion, and the webhook's own
+/// send can all fire near-simultaneously.
+model ErasureRecord {
+  id                     String         @id @default(uuid())
+  emailHash              String         @map("email_hash")
+  trigger                ErasureTrigger
+  moderationQueueEntryId String?        @map("moderation_queue_entry_id")
+  erasedAt               DateTime       @default(now()) @map("erased_at")
+
+  moderationQueueEntry ModerationQueueEntry? @relation(fields: [moderationQueueEntryId], references: [id])
+
+  @@map("erasure_records")
 }

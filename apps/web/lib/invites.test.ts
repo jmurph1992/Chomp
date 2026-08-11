@@ -69,6 +69,7 @@ const {
   cancelOwnershipTransfer,
   acceptOwnershipTransfer,
   declineOwnershipTransfer,
+  adminReassignTruckOwner,
 } = await import('./invites')
 
 beforeEach(() => {
@@ -457,5 +458,56 @@ describe('declineOwnershipTransfer', () => {
   it('throws when the caller is not the pending target (0 rows affected)', async () => {
     truckUpdateMany.mockResolvedValue({ count: 0 })
     await expect(declineOwnershipTransfer('t1', 'u2')).rejects.toThrow('No pending ownership offer')
+  })
+})
+
+describe('adminReassignTruckOwner', () => {
+  it('throws when the truck does not exist, without starting a transaction', async () => {
+    truckFindUnique.mockResolvedValue(null)
+    await expect(adminReassignTruckOwner('t1', 'u2')).rejects.toThrow('Truck not found')
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects a target with no TruckOperator row on this truck at all', async () => {
+    truckFindUnique.mockResolvedValue({ ownerId: 'owner1' })
+    operatorFindUnique.mockResolvedValue(null)
+    await expect(adminReassignTruckOwner('t1', 'u2')).rejects.toThrow('existing manager')
+    expect(transaction).not.toHaveBeenCalled()
+  })
+
+  it('rejects a target whose role on this truck is owner, not manager', async () => {
+    truckFindUnique.mockResolvedValue({ ownerId: 'owner1' })
+    operatorFindUnique.mockResolvedValue({ truckId: 't1', userId: 'u2', role: 'owner' })
+    await expect(adminReassignTruckOwner('t1', 'u2')).rejects.toThrow('existing manager')
+  })
+
+  it('skips the offer/accept dance entirely — swaps ownership atomically, no pendingOwnerId step', async () => {
+    truckFindUnique.mockResolvedValue({ ownerId: 'owner1' })
+    operatorFindUnique.mockResolvedValue({ truckId: 't1', userId: 'u2', role: 'manager' })
+    operatorUpdateMany.mockResolvedValue({ count: 1 })
+
+    await adminReassignTruckOwner('t1', 'u2')
+
+    expect(transaction).toHaveBeenCalledTimes(1)
+    expect(truckUpdate).toHaveBeenCalledWith({
+      where: { id: 't1' },
+      data: { ownerId: 'u2', pendingOwnerId: null },
+    })
+    expect(operatorUpdateMany).toHaveBeenCalledWith({
+      where: { truckId: 't1', userId: 'u2', role: 'manager' },
+      data: { role: 'owner' },
+    })
+    expect(operatorUpdateMany).toHaveBeenCalledWith({
+      where: { truckId: 't1', userId: 'owner1', role: 'owner' },
+      data: { role: 'manager' },
+    })
+  })
+
+  it('rolls back when the promote/demote counts do not both equal 1 (race condition)', async () => {
+    truckFindUnique.mockResolvedValue({ ownerId: 'owner1' })
+    operatorFindUnique.mockResolvedValue({ truckId: 't1', userId: 'u2', role: 'manager' })
+    operatorUpdateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 })
+
+    await expect(adminReassignTruckOwner('t1', 'u2')).rejects.toThrow('please retry')
   })
 })
