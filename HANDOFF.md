@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-11
+2026-08-12
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), and a full customer-facing account page (profile + favorites + reviews) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now the only intentionally-open item left on the whole roadmap, and the user explicitly confirmed at the end of this session that it's next up — see `future-plans/roadmap.md`'s "App navigation — mobile-first" section for the standing direction and the candidate issues already scoped from the 2026-08-04 walkthrough (no persistent nav bar, no mobile nav pattern, no way back from a truck page to map/feed, no dashboard breadcrumbs). That list still needs a proper scoping pass (per `CLAUDE.md`'s "ask questions first" rule) before implementation — nothing about it has been designed yet, only flagged. The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list is closed — there is no single next-up item; the user should be asked what to prioritize next. The app is ready to run/deploy against real data.**
 
 ---
 
@@ -199,9 +199,101 @@ pnpm dev
 21. ~~Account deletion / erasure handling~~ — **done 2026-08-11**, see "This
     session (2026-08-11, account erasure)" below and
     `/docs/features/account-erasure.md`. With this, every item on the
-    original numbered Open Items list is done. **Next up**: nothing
-    prioritized — mobile-first nav (roadmap item 6) is the one remaining
-    open, unscoped item on the whole roadmap.
+    original numbered Open Items list is done.
+22. ~~Mobile-first nav (roadmap item 6)~~ — **done 2026-08-12**, see "This
+    session (2026-08-12, mobile nav)" below and
+    `/docs/features/navigation.md`. With this, every item on the whole
+    `future-plans/roadmap.md` list is closed. **Next up**: nothing
+    prioritized — ask the user what to build next.
+
+## This session (2026-08-12, mobile nav)
+- **Closed roadmap item 6 ("App navigation — mobile-first")** — the last
+  open item on the entire roadmap. Full plan approved via `EnterPlanMode`
+  before any code was written, per `CLAUDE.md`; multiple `AskUserQuestion`
+  rounds resolved: hamburger+drawer (not bottom tab bar) for mobile,
+  horizontal row on desktop, full 4-issue bundle in one pass (not phased),
+  role-filtered Dashboard/Admin links, shadcn/ui installed now, OS-driven
+  dark mode kept (not shadcn's default `.dark`-class toggle), and real
+  signed-in-session role-matrix e2e deferred (no Clerk test-user fixtures
+  exist in this repo yet — unit-tested instead).
+- **shadcn/ui installed** for the first time in this repo (`components.json`,
+  `components/ui/{button,sheet}.tsx`, expanded `app/globals.css`). Used
+  narrowly: `Sheet` (mobile drawer) + `Button` (hamburger trigger) only.
+  **Dark mode required a hand-fix**: the CLI's default `.dark`-class
+  scheme would have silently broken the app's existing automatic
+  (`prefers-color-scheme`) dark mode, since nothing anywhere adds that
+  class — reverted to Tailwind v4's built-in media-query-based `dark:`
+  instead. See `/docs/features/navigation.md`'s shadcn section.
+- **New pure logic in `@chomp/utils`** (`nav-links.ts`, `nav-history.ts`,
+  `dashboard-tabs.ts`, each with full Vitest coverage) — deliberately placed
+  in the shared package rather than `apps/web/lib/`, per the roadmap's own
+  standing direction to keep nav-adjacent logic reusable for the future
+  React Native client.
+- **Fixed a real bug**: the old header showed "Dashboard" to every
+  signed-in user, not just operators. `app/layout.tsx` is now `async` and
+  resolves `getCurrentUser()` + `getOperatedTrucks()` server-side before
+  rendering the nav — no client-side role fetch.
+- **Smart back-nav** on `/trucks/[slug]` uses a `sessionStorage`-backed
+  path stack, not `document.referrer` — discovered during planning that
+  Feed's truck links are soft (`next/link`) navigations that never update
+  the referrer, while the map popup's are hard (raw DOM `<a>`) navigations
+  that do; a referrer check would have silently worked for one arrival path
+  and not the other. Documented explicitly in `/docs/features/navigation.md`
+  so a future pass doesn't "simplify" it back into that bug.
+- **Dashboard breadcrumbs** now share `DASHBOARD_TABS` with the tab row in
+  `dashboard/[truckId]/layout.tsx` (previously hardcoded, no shared source).
+- **New tests**: `apps/web/e2e/nav.spec.ts` (5 tests) and
+  `truck-back-nav.spec.ts` (3 tests, including a real Map-arrival case using
+  the same Mapbox-marker pattern as `map.spec.ts`), plus 25 new Vitest unit
+  tests in `packages/utils`. Full suite verified green (24/24 e2e).
+  Mid-session, the suite looked flaky (`net::ERR_ABORTED`/timeout failures
+  on unrelated tests, "Fast Refresh had to perform a full reload" in the
+  webServer log) — root cause was **a stray `pnpm --filter web dev` process
+  from earlier in the session that was never killed**, sharing/thrashing
+  the same `apps/web/.next` webpack cache with Playwright's own managed dev
+  server on a different port. Not a real bug; fixed by killing the stray
+  process tree and clearing `.next`. Lesson: always confirm a manually
+  started dev server is actually killed (check `ps aux`, not just the port)
+  before trusting an e2e run's failures.
+- **Two pre-existing test failures found while running the full suite,
+  confirmed present on a clean `main` checkout (not caused by this
+  session) — both fixed this session anyway since they were quick and the
+  Clerk one unblocks future work**:
+  - `e2e/auth.spec.ts`'s "renders the Clerk sign-in widget" — was missing a
+    Playwright `globalSetup` calling `@clerk/testing`'s `clerkSetup()`.
+    Fixed: added `apps/web/e2e/global-setup.ts` (guarded — no-ops if Clerk
+    env vars aren't present, so it doesn't break the whole suite for
+    someone running without Clerk secrets configured, consistent with this
+    repo's per-file `test.skip(!canRun, ...)` convention) and wired it into
+    `playwright.config.ts`'s new `globalSetup` field. This is the same
+    underlying gap that was blocking real signed-in role-matrix e2e
+    coverage (operator sees Dashboard, admin sees Admin) — now unblocked
+    for whoever picks that up next, though the fixtures/tests themselves
+    still don't exist yet.
+  - `e2e/feed.spec.ts`'s "renders qualifying reviews, linked to their
+    truck" — the seeded dev DB has two feed items (a review and a photo)
+    both linking to "Taco Kings," so `getByRole('link', { name: 'Taco
+    Kings' })` matched two elements (Playwright strict-mode violation).
+    Fixed by targeting `a[href="/trucks/taco-kings"]` instead, same pattern
+    already used in the new `truck-back-nav.spec.ts`.
+- **Housekeeping**: added `test-results/`, `playwright-report/`,
+  `blob-report/` to the root `.gitignore` (Playwright's default output
+  dirs were untracked and ungitignored before this session).
+- **Environment note for next session**: `apps/web/.env.local`'s
+  `DATABASE_URL`/`DIRECT_URL` contain an unescaped `&` in the query string
+  (e.g. `...&pgbouncer=true`) — running `source .env.local` directly in
+  bash misparses the `&` as a background-job operator and silently fails to
+  export the variable (or exports it inconsistently depending on shell
+  timing). Load env vars with a quoted per-line loop instead: `while IFS=
+  read -r line; do [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && export
+  "$line"; done < .env.local`. This cost real time this session — worth
+  fixing at the source (quote the values in `.env.local`) if it comes up
+  again.
+- **Not yet done**: real-browser role-matrix e2e (operator sees Dashboard,
+  admin sees Admin) needs Clerk test-user sign-in fixtures — same gap noted
+  for `auth.spec.ts` above. A "show only my favorites" map filter and
+  in-app notifications remain deferred from earlier sessions (unrelated to
+  nav).
 
 ## This session (2026-08-11, account erasure)
 - **Closed roadmap item 4 ("Account deletion / erasure handling")** — the last

@@ -7,6 +7,7 @@ import { getOwnReview, getReviewSummary, getVisibleReviewsForTruck } from '@/lib
 import { TruckMenu } from '@/components/truck-menu'
 import { TruckReviews } from '@/components/truck-reviews'
 import { TruckFavoriteButton } from '@/components/truck-favorite-button'
+import { SmartBackLink } from '@/components/nav/smart-back-link'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -33,6 +34,9 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
 
   return (
     <main className="mx-auto max-w-2xl p-8">
+      <div className="mb-4">
+        <SmartBackLink fallbackHref="/feed" />
+      </div>
       {truck.coverUrl && (
         <Image
           src={truck.coverUrl}

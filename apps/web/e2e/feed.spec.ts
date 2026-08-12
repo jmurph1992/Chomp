@@ -10,10 +10,10 @@ test.describe('public feed', () => {
 
     // Seeded as rating: 5, isVisible: true — qualifies (rating >= 4).
     await expect(page.getByText('Best tacos in Austin, hands down.')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'Taco Kings' })).toHaveAttribute(
-      'href',
-      '/trucks/taco-kings',
-    )
+    // The seeded feed can have more than one item (review + photo) linking
+    // to the same truck — target by href, not getByRole('link', { name }),
+    // to avoid a strict-mode violation when more than one matches.
+    await expect(page.locator('a[href="/trucks/taco-kings"]').first()).toBeVisible()
   })
 
   test('never renders a hidden review even when its rating alone would qualify', async ({

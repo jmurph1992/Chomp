@@ -21,6 +21,7 @@
 | [Manager Invites](./features/manager-invites.md) | Done | Owner-only, email-gated shareable link to add a manager; cancel/remove built in |
 | [Account Page](./features/account.md) | Phase 1 done | Profile details (embedded Clerk `UserProfile`) + a read-only reviews list, including orphaned ones; favorites deferred |
 | [Account Erasure](./features/account-erasure.md) | Done | Hard-deletes the `User` row via an Inngest job; anonymizes (not deletes) reviews/photos; sole-truck-owner conflicts blocked and routed to a generic admin moderation queue |
+| [Navigation](./features/navigation.md) | Done | Site-wide responsive nav (desktop row / mobile drawer), role-filtered links, smart back-nav on the truck page, operator dashboard breadcrumbs |
 
 ---
 

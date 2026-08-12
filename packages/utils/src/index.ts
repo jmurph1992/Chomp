@@ -3,6 +3,10 @@
  * Keep this package dependency-free where possible.
  */
 
+export * from './nav-links'
+export * from './nav-history'
+export * from './dashboard-tabs'
+
 // ─── Slugs ────────────────────────────────────────────────────────────────────
 
 /**

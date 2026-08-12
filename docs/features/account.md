@@ -117,10 +117,11 @@ count** — a personal save list, not a popularity signal, unlike photo likes
 
 ## Navigation
 
-A plain `<Link href="/account">Account</Link>` in `app/layout.tsx`'s header,
-next to the existing "Dashboard" link — not a nav-bar overhaul. The broader
-mobile-first navigation work (`future-plans/roadmap.md`) is still its own,
-separately-scoped item.
+Originally a plain `<Link href="/account">Account</Link>` in
+`app/layout.tsx`'s header — since superseded by the full site-wide
+responsive nav built in `/docs/features/navigation.md`, which now resolves
+the Account link (and Dashboard/Admin, role-filtered) server-side as part
+of that broader nav-link list.
 
 ## Scope cuts (not built this pass)
 

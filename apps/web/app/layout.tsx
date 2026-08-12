@@ -1,7 +1,15 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/nextjs'
+import { ClerkProvider } from '@clerk/nextjs'
+import { Geist } from 'next/font/google'
+import { getNavLinksForUser } from '@chomp/utils'
+import { cn } from '@/lib/utils'
+import { getCurrentUser } from '@/lib/auth'
+import { getOperatedTrucks } from '@/lib/operators'
+import { SiteHeader } from '@/components/nav/site-header'
+import { NavHistoryTracker } from '@/components/nav/nav-history-tracker'
 import './globals.css'
+
+const geist = Geist({ subsets: ['latin'], variable: '--font-sans' })
 
 /**
  * Root layout — wraps every page in the app.
@@ -14,29 +22,21 @@ export const metadata: Metadata = {
   description: 'Find food trucks near you.',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const user = await getCurrentUser()
+  const operatedTrucks = user ? await getOperatedTrucks(user.id) : []
+  const navLinks = getNavLinksForUser(user, operatedTrucks.length > 0)
+
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" className={cn('font-sans', geist.variable)}>
         <body className="antialiased">
-          <header className="flex items-center justify-end gap-4 p-4">
-            <SignedOut>
-              <SignInButton mode="modal" />
-            </SignedOut>
-            <SignedIn>
-              <Link href="/account" className="text-sm underline">
-                Account
-              </Link>
-              <Link href="/dashboard" className="text-sm underline">
-                Dashboard
-              </Link>
-              <UserButton />
-            </SignedIn>
-          </header>
+          <NavHistoryTracker />
+          <SiteHeader navLinks={navLinks} />
           {children}
         </body>
       </html>

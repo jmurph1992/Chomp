@@ -45,7 +45,7 @@ Sentry, Resend, Stripe — each presumably gets wired up at its own natural
 trigger (first real bug worth tracking, first real email, first real
 payment) rather than proactively.
 
-## 6. App navigation — mobile-first
+## 6. App navigation — mobile-first — done 2026-08-12
 Flagged 2026-08-04 during a hands-on walkthrough. Confirmed scope: a real
 site-wide navigation bar, and mobile nav patterns specifically — this is a
 food-truck app, so mobile browser usage comes first, ahead of desktop.
@@ -58,16 +58,18 @@ eventual goal. Treat desktop as the secondary breakpoint, and prefer
 approaches (e.g. shared business logic in `packages/*`) that won't need to
 be redone for that future native client.
 
-Candidate issues observed during the 2026-08-04 walkthrough (still needs
-scoping before building):
-- No persistent nav bar on public pages — only "Sign in"/"Dashboard" +
-  avatar in the top right; no direct links between `/`, `/feed`, and a
-  truck's own page
-- No mobile-specific nav pattern at all (e.g. bottom tab bar) — untested
-  whether the current header even works well at phone widths
-- No way back from a truck detail page to the map or feed without the
-  browser's own back button
-- No breadcrumbs anywhere in the operator dashboard (`/dashboard/[truckId]/*`)
+All four candidate issues observed during the 2026-08-04 walkthrough are
+resolved — see `/docs/features/navigation.md`:
+- ~~No persistent nav bar on public pages~~ — a real site-wide nav (desktop
+  inline row / mobile hamburger + drawer) now links `/`, `/feed`, and (when
+  applicable) Dashboard/Admin/Account, replacing the old ad hoc header.
+- ~~No mobile-specific nav pattern~~ — hamburger opens a shadcn `Sheet`
+  drawer on mobile; the first real shadcn/ui usage in the repo.
+- ~~No way back from a truck detail page to the map or feed~~ — smart
+  back-nav (`router.back()` when arriving in-app, else a fixed `/feed`
+  link), via a `sessionStorage`-backed path stack.
+- ~~No breadcrumbs in the operator dashboard~~ — `Dashboard > {truck} >
+  {tab}`, sourced from the same `DASHBOARD_TABS` list the tab row uses.
 
 ## Known doc drift
 - `/go-live-requirements/operator-dashboard.md` still says image upload is

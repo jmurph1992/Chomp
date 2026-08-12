@@ -1,8 +1,10 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { dashboardTabHref, DASHBOARD_TABS } from '@chomp/utils'
 import { requireOperator, getOperatedTrucks } from '@/lib/operators'
 import { getTruckForEdit } from '@/lib/trucks'
 import { TruckSwitcher } from '@/components/dashboard/truck-switcher'
+import { DashboardBreadcrumbs } from '@/components/dashboard/dashboard-breadcrumbs'
 
 /**
  * Gates the entire /dashboard/[truckId] subtree. Every nested page still
@@ -30,7 +32,9 @@ export default async function TruckDashboardLayout({
 
   return (
     <div className="mx-auto max-w-2xl p-8">
-      <div className="flex items-center justify-between">
+      <DashboardBreadcrumbs truckId={truckId} truckName={truck.name} />
+
+      <div className="mt-2 flex items-center justify-between">
         <h1 className="text-2xl font-bold">{truck.name}</h1>
         <Link href={`/trucks/${truck.slug}`} className="text-sm underline">
           View public page
@@ -40,21 +44,11 @@ export default async function TruckDashboardLayout({
       <TruckSwitcher trucks={operatedTrucks} currentTruckId={truckId} />
 
       <nav className="mt-4 flex gap-4 border-b text-sm">
-        <Link href={`/dashboard/${truckId}`} className="pb-2">
-          Profile
-        </Link>
-        <Link href={`/dashboard/${truckId}/menu`} className="pb-2">
-          Menu
-        </Link>
-        <Link href={`/dashboard/${truckId}/schedule`} className="pb-2">
-          Schedule
-        </Link>
-        <Link href={`/dashboard/${truckId}/location`} className="pb-2">
-          Location
-        </Link>
-        <Link href={`/dashboard/${truckId}/team`} className="pb-2">
-          Team
-        </Link>
+        {DASHBOARD_TABS.map((tab) => (
+          <Link key={tab.slug} href={dashboardTabHref(truckId, tab)} className="pb-2">
+            {tab.label}
+          </Link>
+        ))}
       </nav>
 
       <div className="mt-6">{children}</div>

@@ -10,6 +10,11 @@ out
 next-env.d.ts
 *.tsbuildinfo
 
+# Playwright
+test-results
+playwright-report
+blob-report
+
 # Environment
 .env
 .env.local
