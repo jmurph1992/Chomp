@@ -3,6 +3,16 @@
 > Not go-live blockers (those live in `/go-live-requirements/`) — this is the
 > broader list of what's next, grouped by theme. Updated as priorities shift.
 
+## 0. Location freshness / "Active now" — planned, not yet built (2026-08-12)
+Flagged during a product gap-analysis against the app's core "find food
+trucks near you" use case: a truck's posted location shows indefinitely
+today, with no signal for whether it's actually still there.
+Fully scoped — an operator declares how long they'll be at a location when
+posting it (presets: 1h/2h/3h/4h/6h/All day), and trucks whose window has
+lapsed drop out of "nearby" map results while still being reachable via
+direct link/favorites/feed. Full technical plan, ready to build straight
+from: `future-plans/location-freshness-plan.md`.
+
 ## 1. Make local dev solid — done 2026-08-04
 - ~~Local Clerk webhooks can't reach `localhost`~~ — documented the
   `clerk webhooks listen --forward-to` workflow in `/docs/features/auth.md`.
