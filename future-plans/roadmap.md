@@ -100,6 +100,53 @@ resolved — see `/docs/features/navigation.md`:
 - ~~No breadcrumbs in the operator dashboard~~ — `Dashboard > {truck} >
   {tab}`, sourced from the same `DASHBOARD_TABS` list the tab row uses.
 
+## 7. Product gap-analysis findings (2026-08-13)
+A second gap-analysis pass against the app's core use cases (the first
+produced location freshness, item 0 above — that session's other findings
+were never written down and couldn't be recovered, hence this re-run).
+Same methodology: cross-referencing the original product scope and existing
+schema against what's actually wired up, not just brainstorming.
+
+- **a. Special events — not yet scoped.** The original product scope named
+  "weekly schedule, menu, **events**" as an operator capability. `TruckEvent`
+  exists in full in the schema (title, description, time window, address,
+  geom) — its own schema comment says *"Planned feature — not yet wired to
+  the UI."* Zero UI, zero API, zero docs. The single closest match to how
+  location freshness itself was found (a real, named product capability
+  sitting dead in the schema).
+- **b. "Get Directions" link — done 2026-08-13.** Truck detail page only
+  (list/map popup surfaces deliberately deferred — the map's raw-DOM popup
+  implementation would be a separate code path, discussed and set aside);
+  shown regardless of location freshness; a single Google Maps universal
+  link, address-preferred with a coordinate fallback. `getTruckBySlug`
+  gained a small second raw query for coordinates. Caught a real bug during
+  real-DB verification: this schema has no `@db.Uuid` on any id column (ids
+  are `TEXT`), so `${truck.id}::uuid` broke the new query's `=` comparison
+  — fixed by dropping the cast. See `/docs/features/truck-detail.md`. Built
+  from `future-plans/get-directions-plan.md`.
+- **c. Customer-facing content reporting — not yet scoped.** Moderation
+  today is entirely admin-initiated (`/admin/reviews`); there's no "report
+  this review/photo" action a customer can trigger. Trust-and-safety gap.
+- **d. Favorites × location freshness aren't connected — not yet scoped.**
+  A customer can favorite a truck but has no way to know it just went
+  "Active now" nearby — no notification infra exists to hang this off of
+  yet (same underlying gap as (g) below, but this specific pairing is newly
+  relevant now that both favorites and freshness exist).
+- **e. No search by truck name/city/zip** — already flagged in
+  `/docs/features/map.md` and `/docs/features/navigation.md`'s scope cuts;
+  re-surfaced here as still open, not a new finding.
+- **f. No real "open now" indicator** — already flagged in
+  `/docs/features/truck-detail.md`'s scope cuts, blocked on the schema
+  having no per-truck timezone; re-surfaced as still open.
+- **g. No "show only my favorites" filter on the map/list** — already
+  flagged in `/docs/features/account.md`'s scope cuts; re-surfaced as still
+  open. Would extend the same filter mechanism item 0b just built
+  (`@chomp/utils/truck-list-filters.ts`).
+- **h. No operator notification on verification decisions** — already
+  flagged in `/docs/features/truck-verification.md`'s "Deliberately
+  deferred" section (no Resend integration yet to hang it off of);
+  re-surfaced as still open.
+
 ## Known doc drift
 - `/go-live-requirements/operator-dashboard.md` still says image upload is
   "blocked on Cloudflare R2/Images" — stale since photo upload shipped. Small

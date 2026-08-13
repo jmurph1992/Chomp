@@ -106,6 +106,9 @@ export type TruckDetail = {
   locationReportedAt: string | null
   /** Null means "does not expire" — only possible for legacy pre-feature rows. */
   locationExpiresAt: string | null
+  /** Null together iff locationReportedAt is null — coordinates are required on every postLocation call, unlike address. */
+  locationLat: number | null
+  locationLng: number | null
   schedule: TruckScheduleEntry[]
   menu: MenuCategoryView[]
   /** False for an anonymous visitor — see getTruckBySlug's optional viewerId param. */

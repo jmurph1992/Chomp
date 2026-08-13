@@ -133,6 +133,8 @@ describe('getNearbyTrucks', () => {
 describe('getTruckBySlug', () => {
   beforeEach(() => {
     findUnique.mockReset()
+    queryRaw.mockReset()
+    queryRaw.mockResolvedValue([])
   })
 
   it('returns null when no active truck matches the slug', async () => {
@@ -201,11 +203,15 @@ describe('getTruckBySlug', () => {
       ],
     })
 
+    queryRaw.mockResolvedValue([{ lat: 30.27, lng: -97.74 }])
+
     const result = await getTruckBySlug('taco-kings')
 
     expect(result?.currentAddress).toBe('123 Main St')
     expect(result?.locationReportedAt).toBe('2026-01-01T00:00:00.000Z')
     expect(result?.locationExpiresAt).toBe('2026-01-01T06:00:00.000Z')
+    expect(result?.locationLat).toBe(30.27)
+    expect(result?.locationLng).toBe(-97.74)
     expect(result?.schedule).toHaveLength(1)
     expect(result?.schedule.at(0)?.locationNote).toBe('Corner of 5th')
     expect(result?.menu).toHaveLength(1)
@@ -234,6 +240,9 @@ describe('getTruckBySlug', () => {
 
     expect(result?.locationReportedAt).toBeNull()
     expect(result?.locationExpiresAt).toBeNull()
+    expect(result?.locationLat).toBeNull()
+    expect(result?.locationLng).toBeNull()
+    expect(queryRaw).not.toHaveBeenCalled()
   })
 
   it('maps isFavorited true/false for the truck and each menu item based on the favorites include', async () => {

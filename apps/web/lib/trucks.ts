@@ -123,6 +123,18 @@ export async function getTruckBySlug(
 
   const currentLocation = truck.locations[0]
 
+  // geom is Unsupported() in Prisma (same reason getNearbyTrucks uses raw
+  // SQL) — only current-location coordinates are needed here (the Get
+  // Directions link's fallback when no address is on file), so this is a
+  // second small query rather than folding coordinates into every truck fetch.
+  const coords = currentLocation
+    ? await db.$queryRaw<{ lat: number; lng: number }[]>`
+        SELECT ST_Y(geom::geometry) AS "lat", ST_X(geom::geometry) AS "lng"
+        FROM truck_locations
+        WHERE truck_id = ${truck.id} AND is_current = true
+      `
+    : []
+
   return {
     id: truck.id,
     slug: truck.slug,
@@ -137,6 +149,8 @@ export async function getTruckBySlug(
     currentAddress: currentLocation?.address ?? null,
     locationReportedAt: currentLocation?.reportedAt.toISOString() ?? null,
     locationExpiresAt: currentLocation?.expiresAt?.toISOString() ?? null,
+    locationLat: coords[0]?.lat ?? null,
+    locationLng: coords[0]?.lng ?? null,
     isFavorited: truck.favorites.length > 0,
     schedule: truck.schedules.map((s) => ({
       id: s.id,

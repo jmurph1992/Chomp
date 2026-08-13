@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-13 (location freshness + nearby-list-view, same day)
+2026-08-13 (location freshness + nearby-list-view + gap-analysis/get-directions, same day)
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list was closed as of the 2026-08-12 session. **This session (2026-08-13) built two more, back to back**: **location freshness / "Active now"** (roadmap item 0, see below and `/docs/features/operator-dashboard.md#location-updates`) — an operator posting a location now also declares how long they'll be there (presets 1h/2h/3h/4h/6h/All day, "All day" = end of local calendar day), and a truck whose window has lapsed drops out of "nearby" map results while still showing on its own direct-link page with a muted "last active" state instead of the green "Active now" badge; an Extend action lets an operator push the expiry out without re-sharing GPS, only while still active. No migration needed — `TruckLocation.expiresAt` already existed, unused, since the first migration. Then, once the user flagged it mid-session, **a nearby-trucks list view + filter/sort** (roadmap item 0b, see below and `/docs/features/map.md#list-view`) — a Map/List toggle on the root page showing the exact same filtered set the map does, sortable by distance/rating, filterable by cuisine/minimum rating; required first lifting `TruckMap`'s internal geolocation-refetch out into a new `TruckDiscovery` wrapper so a sibling list view could see the same data. Every item on the roadmap, including both items added this session, is closed as of now. The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list was closed as of the 2026-08-12 session. **This session (2026-08-13) built two more, back to back**: **location freshness / "Active now"** (roadmap item 0, see below and `/docs/features/operator-dashboard.md#location-updates`) — an operator posting a location now also declares how long they'll be there (presets 1h/2h/3h/4h/6h/All day, "All day" = end of local calendar day), and a truck whose window has lapsed drops out of "nearby" map results while still showing on its own direct-link page with a muted "last active" state instead of the green "Active now" badge; an Extend action lets an operator push the expiry out without re-sharing GPS, only while still active. No migration needed — `TruckLocation.expiresAt` already existed, unused, since the first migration. Then, once the user flagged it mid-session, **a nearby-trucks list view + filter/sort** (roadmap item 0b, see below and `/docs/features/map.md#list-view`) — a Map/List toggle on the root page showing the exact same filtered set the map does, sortable by distance/rating, filterable by cuisine/minimum rating; required first lifting `TruckMap`'s internal geolocation-refetch out into a new `TruckDiscovery` wrapper so a sibling list view could see the same data. **Then, at the user's request, a second product gap-analysis pass** (roadmap item 7, a-h) re-surfaced 8 candidate gaps — the closest match to a named-but-unbuilt original scope item is `TruckEvent` (special appearances/events, fully modeled in the schema, explicitly commented "Planned feature — not yet wired to the UI," never scoped this session); the one item actually built this session is **b, a "Get Directions" link** on the truck detail page (Google Maps universal link, address-preferred with a coordinate fallback) — caught and fixed a real bug along the way (this schema has no `@db.Uuid` on any id column, so a `::uuid` cast broke a new raw-SQL `WHERE` comparison; found via a real Playwright run against the live dev DB, not unit tests). Items 0, 0b, and 7b are closed; the rest of item 7 (a, c-h) is flagged in the roadmap but not yet scoped. The app is ready to run/deploy against real data.**
 
 ---
 
@@ -209,9 +209,109 @@ pnpm dev
     and `/docs/features/operator-dashboard.md#location-updates`.
 24. ~~Nearby-trucks list view + filter/sort (roadmap item 0b)~~ — **done
     2026-08-13**, same day, see "This session (2026-08-13, nearby list
-    view)" below and `/docs/features/map.md#list-view`. **Next up**: nothing
-    prioritized — every roadmap item is closed; ask the user what to build
-    next.
+    view)" below and `/docs/features/map.md#list-view`.
+25. **A second product gap-analysis pass, roadmap item 7** (a-h) — see "This
+    session (2026-08-13, gap-analysis + get directions)" below. Of the 8
+    findings, one (b, "Get Directions") was scoped and built the same
+    session; the rest (events, content reporting, favorites×freshness
+    notifications, plus four already-tracked re-surfaced items) are flagged
+    in `future-plans/roadmap.md` item 7 but **not yet scoped**. **Next up**:
+    events (item 7a) is the closest match to how location freshness itself
+    was found — a named original-scope capability (`TruckEvent`) sitting
+    fully dead in the schema — worth asking the user if that's next, or
+    picking from the rest of item 7.
+
+## This session (2026-08-13, gap-analysis + get directions)
+- **Re-ran the product gap-analysis** that originally produced location
+  freshness (roadmap item 0) — the user asked what else was on that
+  original list, and neither `HANDOFF.md` nor memory had it preserved
+  (only the one item that got written into the roadmap survived). Rather
+  than guess, re-did the analysis fresh against the current codebase:
+  cross-referenced the original product scope (`HANDOFF.md`'s "What Was
+  Decided This Session — Product" section) and existing schema against
+  what's actually wired up. Findings written to `future-plans/roadmap.md`
+  item 7 (a-h) at the user's request ("put all of these on the to-do
+  list"): (a) `TruckEvent` — named in the original scope ("weekly schedule,
+  menu, **events**"), fully modeled in the schema, own comment says
+  "Planned feature — not yet wired to the UI," zero UI/API/docs; (b) no
+  "Get Directions" link anywhere in the app (built this session, see
+  below); (c) no customer-facing content-reporting/flagging, moderation is
+  entirely admin-initiated; (d) favorites and location freshness aren't
+  connected — no way to know a favorited truck just went "Active now"; (e-h)
+  four already-self-flagged scope cuts re-surfaced as still open (search,
+  "open now" indicator, favorites-only map/list filter, operator
+  verification-decision notifications).
+- **Built roadmap item 7b ("Get Directions" link)** from a plan scoped the
+  same session (`future-plans/get-directions-plan.md`), after a Q&A round
+  that included a real design detour: the user asked to understand the
+  raw-DOM-vs-React distinction in `truck-map.tsx` first (why the map
+  popup's favorite button can't use the same `revalidatePath`-driven
+  no-local-state pattern as `TruckFavoriteButton`), then asked whether that
+  pattern was "shoddy" and whether a `react-map-gl`/React-portal-based
+  rewrite would be better — answered as an architecture recommendation
+  (portals as a real lighter-weight middle ground; a full `react-map-gl`
+  migration as a bigger, separate, higher-regression-risk refactor not
+  worth bundling into this feature) without implementing either, then the
+  user chose to proceed with the original scoping questions. Locked in:
+  **truck detail page only** this pass (list/map popup surfaces
+  deliberately deferred, not an oversight — the map popup would need the
+  raw-DOM implementation just discussed); **shown regardless of location
+  freshness** (a stale truck still gets the link, consistent with
+  `LocationStatus` showing "last active" rather than hiding stale info);
+  **address preferred, coordinates as fallback**.
+- **New `packages/utils/src/directions.ts`**: `buildDirectionsUrl(address,
+  lat, lng)` — a single Google Maps universal link
+  (`.../maps/dir/?api=1&destination=...`), not separate Google/Apple links
+  (opens the native app via deep-link handling on iOS/Android when
+  installed, falls back to web otherwise, no platform detection needed).
+  Returns `null` when there's no destination at all. Full test coverage
+  including a special-characters-in-address encoding case.
+- **A real coverage gap in `TruckDetail`, filled first per the plan**: no
+  coordinates existed anywhere on the type — only the optional address
+  text. `lib/trucks.ts#getTruckBySlug` gained a small second raw query
+  (`ST_Y`/`ST_X` off `geom`, only run when a current location row exists)
+  for `locationLat`/`locationLng`, same reason `getNearbyTrucks` already
+  needs raw SQL for coordinates (PostGIS `geography` is `Unsupported()` in
+  Prisma).
+- **A real bug caught during real-DB verification, not left latent**: the
+  first version cast the query's `truck_id` comparison as
+  `${truck.id}::uuid`, mirroring `postLocation`'s existing `::uuid` cast in
+  its `INSERT VALUES` — but that cast only works in an *assignment* context
+  (inserting a uuid-typed value into a text column is allowed), not in a
+  `WHERE col = value` *comparison*, which requires an exact type match on
+  both sides of `=`. This schema has **no `@db.Uuid` on any id column**
+  (confirmed via grep) — every id, including `truck_id`, is plain `TEXT` in
+  Postgres, not a native `uuid` column. Casting the parameter to `uuid`
+  produced `text = uuid`, which Postgres has no operator for — the page
+  500'd. Caught by an actual Playwright run against the live dev DB (this
+  environment has real Neon/Mapbox credentials, unlike most prior
+  sessions), not by unit tests, since the mocked `$queryRaw` in
+  `trucks.test.ts` doesn't validate real SQL. Fixed by dropping the cast
+  (`truck_id = ${truck.id}`, plain text-to-text comparison, matching every
+  other id comparison already in this codebase — `postLocation`'s cast was
+  only ever safe because it's an INSERT, not a precedent to copy for a
+  WHERE clause).
+- **Verified end-to-end against the real dev DB**: a throwaway Playwright
+  test (deleted after, never committed) confirmed the link renders and
+  points at a real, correctly-encoded Google Maps URL for a seeded truck
+  (`https://www.google.com/maps/dir/?api=1&destination=Somewhere%20near%20downtown%20Austin%20(Taco%20Kings)`).
+- **Tests**: new `packages/utils/src/directions.test.ts` (4 tests); extended
+  `apps/web/lib/trucks.test.ts` (`getTruckBySlug`'s existing tests gained
+  `locationLat`/`locationLng` assertions, plus a new assertion that the
+  coordinate query is never called when there's no current location row).
+  Full `pnpm --filter web test`: 371/371 passing (no new test count change —
+  extended existing cases rather than adding new ones, matching the plan's
+  "extend" framing). Full `pnpm --filter web exec tsc --noEmit`: clean.
+  Reverted the `tsconfig.json` mutation caused by the Playwright dev-server
+  run, same as every prior session's `next build`/`next dev` mutation.
+- **Not yet done / next session**: items 7a, 7c, 7d on the gap-analysis list
+  (events, content reporting, favorites×freshness notifications) are
+  flagged but not yet scoped — see `future-plans/roadmap.md` item 7 for
+  what's already known about each. The list view and map popups still don't
+  have a directions link (deliberately deferred this pass, see
+  `docs/features/truck-detail.md`'s Get Directions section). None of this
+  session's changes are committed to git yet — left as unstaged for review,
+  same pattern as prior sessions.
 
 ## This session (2026-08-13, nearby list view)
 - **Built roadmap item 0b ("Nearby-trucks list view + filter/sort")**

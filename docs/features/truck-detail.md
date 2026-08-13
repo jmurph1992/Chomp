@@ -26,6 +26,23 @@ regardless of freshness; only "nearby" results hide it. See
 [`/docs/features/operator-dashboard.md#location-updates`](./operator-dashboard.md#location-updates)
 for the write side.
 
+**Get Directions**: shown alongside `<LocationStatus>` whenever there's a
+current location row, regardless of freshness — a stale ("last active")
+truck still gets a link, same reasoning as showing the muted status instead
+of hiding it. `buildDirectionsUrl` (`packages/utils/src/directions.ts`)
+builds a single Google Maps universal link
+(`https://www.google.com/maps/dir/?api=1&destination=...`), preferring the
+operator's typed address when present and falling back to coordinates
+otherwise — coordinates aren't available on `TruckDetail` for free, since
+they live in `TruckLocation.geom`
+(`Unsupported("geography(Point, 4326)")` in Prisma, no `@db.Uuid` on any id
+column in this schema either); `getTruckBySlug` runs a small second raw
+query for `ST_Y`/`ST_X` only when a current location row exists, same
+reasoning `getNearbyTrucks` already uses raw SQL for coordinates. **Truck
+detail page only this pass** — the list view and map popups don't have this
+link yet, deliberately deferred (the map's popups are raw DOM, a separate
+implementation from this page's plain React `<a>`), not an oversight.
+
 **Scope cut**: no computed "open now" boolean — the schema has no per-truck
 timezone, so schedule times are shown as plain text
 (`apps/web/lib/schedule.ts#getTodaysScheduleEntries`) instead of a

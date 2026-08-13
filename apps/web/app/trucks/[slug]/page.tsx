@@ -9,6 +9,7 @@ import { TruckReviews } from '@/components/truck-reviews'
 import { TruckFavoriteButton } from '@/components/truck-favorite-button'
 import { SmartBackLink } from '@/components/nav/smart-back-link'
 import { LocationStatus } from '@/components/location-status'
+import { buildDirectionsUrl } from '@chomp/utils'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -26,6 +27,7 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
   if (!truck) notFound()
 
   const todaysSchedule = getTodaysScheduleEntries(truck.schedule)
+  const directionsUrl = buildDirectionsUrl(truck.currentAddress, truck.locationLat, truck.locationLng)
 
   const [reviews, reviewSummary, ownReview] = await Promise.all([
     getVisibleReviewsForTruck(truck.id, currentUser?.id),
@@ -79,6 +81,16 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
             </p>
           )}
           <LocationStatus reportedAt={truck.locationReportedAt} expiresAt={truck.locationExpiresAt} />
+          {directionsUrl && (
+            <a
+              href={directionsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-sm text-blue-600 underline"
+            >
+              Get Directions
+            </a>
+          )}
         </div>
       )}
 
