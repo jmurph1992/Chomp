@@ -6,6 +6,8 @@
 export * from './nav-links'
 export * from './nav-history'
 export * from './dashboard-tabs'
+export * from './location-freshness'
+export * from './truck-list-filters'
 
 // ─── Slugs ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +47,18 @@ export function formatUsd(amount: number): string {
     style: 'currency',
     currency: 'USD',
   }).format(amount)
+}
+
+const METERS_PER_MILE = 1609.344
+
+/**
+ * Formats a PostGIS ST_Distance result (meters) as a miles string.
+ * e.g. 804.67 → "0.5 mi". One decimal place — this app's radius/distance
+ * values are all in miles-scale (10-50 mile search radius), not precise
+ * enough to warrant more.
+ */
+export function formatDistanceMiles(meters: number): string {
+  return `${(meters / METERS_PER_MILE).toFixed(1)} mi`
 }
 
 /**

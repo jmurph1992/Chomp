@@ -67,6 +67,8 @@ describe('getNearbyTrucks', () => {
         lng: -97.74,
         distanceMeters: 500,
         isFavorited: false,
+        averageRating: 4.5,
+        reviewCount: 12,
       },
     ]
     queryRaw.mockResolvedValue(rows)
@@ -84,6 +86,26 @@ describe('getNearbyTrucks', () => {
     const sql = (queryRaw.mock.calls.at(0)?.at(0) as string[]).join('')
     expect(sql).toContain('t.is_active = true')
     expect(sql).toContain("t.verification_status = 'verified'")
+  })
+
+  it('excludes trucks whose location freshness window has lapsed', async () => {
+    queryRaw.mockResolvedValue([])
+    await getNearbyTrucks(30.2672, -97.7431, 5000)
+
+    const sql = (queryRaw.mock.calls.at(0)?.at(0) as string[]).join('')
+    expect(sql).toContain('tl.expires_at IS NULL OR tl.expires_at > now()')
+  })
+
+  it('LEFT JOINs a visible-reviews-only rating aggregate, keyed by truck', async () => {
+    queryRaw.mockResolvedValue([])
+    await getNearbyTrucks(30.2672, -97.7431, 5000)
+
+    const sql = (queryRaw.mock.calls.at(0)?.at(0) as string[]).join('')
+    expect(sql).toContain('AVG(rating)')
+    expect(sql).toContain('WHERE is_visible = true')
+    expect(sql).toContain('GROUP BY truck_id')
+    expect(sql).toContain('averageRating')
+    expect(sql).toContain('reviewCount')
   })
 
   it('LEFT JOINs truck_favorites so a viewer sees isFavorited without excluding unfavorited trucks', async () => {
@@ -138,7 +160,13 @@ describe('getTruckBySlug', () => {
       instagram: null,
       logoUrl: null,
       coverUrl: null,
-      locations: [{ address: '123 Main St' }],
+      locations: [
+        {
+          address: '123 Main St',
+          reportedAt: new Date('2026-01-01T00:00:00Z'),
+          expiresAt: new Date('2026-01-01T06:00:00Z'),
+        },
+      ],
       favorites: [],
       schedules: [
         {
@@ -176,10 +204,36 @@ describe('getTruckBySlug', () => {
     const result = await getTruckBySlug('taco-kings')
 
     expect(result?.currentAddress).toBe('123 Main St')
+    expect(result?.locationReportedAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(result?.locationExpiresAt).toBe('2026-01-01T06:00:00.000Z')
     expect(result?.schedule).toHaveLength(1)
     expect(result?.schedule.at(0)?.locationNote).toBe('Corner of 5th')
     expect(result?.menu).toHaveLength(1)
     expect(result?.menu.at(0)?.items.at(0)?.price).toBe(4.5)
+  })
+
+  it('returns null locationReportedAt/locationExpiresAt when there is no current location row', async () => {
+    findUnique.mockResolvedValue({
+      id: 't1',
+      slug: 'taco-kings',
+      name: 'Taco Kings',
+      description: null,
+      cuisineType: [],
+      phone: null,
+      website: null,
+      instagram: null,
+      logoUrl: null,
+      coverUrl: null,
+      locations: [],
+      favorites: [],
+      schedules: [],
+      menuCategories: [],
+    })
+
+    const result = await getTruckBySlug('taco-kings')
+
+    expect(result?.locationReportedAt).toBeNull()
+    expect(result?.locationExpiresAt).toBeNull()
   })
 
   it('maps isFavorited true/false for the truck and each menu item based on the favorites include', async () => {

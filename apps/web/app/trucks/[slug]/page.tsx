@@ -8,6 +8,7 @@ import { TruckMenu } from '@/components/truck-menu'
 import { TruckReviews } from '@/components/truck-reviews'
 import { TruckFavoriteButton } from '@/components/truck-favorite-button'
 import { SmartBackLink } from '@/components/nav/smart-back-link'
+import { LocationStatus } from '@/components/location-status'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -70,10 +71,15 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
         <p className="mt-1 text-gray-500">{truck.cuisineType.join(', ')}</p>
       )}
       {truck.description && <p className="mt-4">{truck.description}</p>}
-      {truck.currentAddress && (
-        <p className="mt-4">
-          <strong>Current location:</strong> {truck.currentAddress}
-        </p>
+      {truck.locationReportedAt && (
+        <div className="mt-4 space-y-1">
+          {truck.currentAddress && (
+            <p>
+              <strong>Current location:</strong> {truck.currentAddress}
+            </p>
+          )}
+          <LocationStatus reportedAt={truck.locationReportedAt} expiresAt={truck.locationExpiresAt} />
+        </div>
       )}
 
       {todaysSchedule.length > 0 && (

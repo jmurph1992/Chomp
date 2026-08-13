@@ -40,6 +40,9 @@ export type TruckMapMarker = {
   distanceMeters: number
   /** Always false for an anonymous (signed-out) request. */
   isFavorited: boolean
+  /** Null means no (visible) reviews yet — distinct from a real 0, which can't happen (rating is 1-5). */
+  averageRating: number | null
+  reviewCount: number
 }
 
 /** A single schedule entry as shown on a truck's detail page. */
@@ -94,6 +97,15 @@ export type TruckDetail = {
   logoUrl: string | null
   coverUrl: string | null
   currentAddress: string | null
+  /**
+   * Non-null iff a current TruckLocation row exists at all — use this, not
+   * currentAddress, to decide whether to show any location UI, since
+   * currentAddress can be null even with a real current row if the operator
+   * left it blank.
+   */
+  locationReportedAt: string | null
+  /** Null means "does not expire" — only possible for legacy pre-feature rows. */
+  locationExpiresAt: string | null
   schedule: TruckScheduleEntry[]
   menu: MenuCategoryView[]
   /** False for an anonymous visitor — see getTruckBySlug's optional viewerId param. */
@@ -234,6 +246,8 @@ export type PostLocationInput = {
   lat: number
   lng: number
   address: string | null
+  /** ISO instant, computed client-side from a DurationPreset (see @chomp/utils). */
+  expiresAt: string
 }
 
 // ─── Photo upload ─────────────────────────────────────────────────────────────

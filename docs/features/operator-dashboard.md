@@ -70,6 +70,46 @@ here. Coordinates are what make a truck findable on the customer map
 just for display. `postLocation` retires the previous `isCurrent` row and
 inserts the new one inside a transaction.
 
+### Location freshness ("Active now")
+
+Every location post also requires a declared duration — how long the
+operator expects to be there — via `LocationDurationPicker`
+(`apps/web/components/dashboard/location-duration-picker.tsx`): 1h / 2h / 3h
+/ 4h / 6h / **All day**. "All day" resolves to the end of the operator's
+*local* calendar day at submit time (`endOfLocalDay` in
+`@chomp/utils/location-freshness.ts`), not a no-expiry sentinel — a truck
+posted at 11pm with "All day" selected expires around midnight, not 24 hours
+later.
+
+Freshness is computed at read time (`expires_at IS NULL OR expires_at >
+now()`), not via a background job — see
+[`/docs/features/map.md`](./map.md#query) for the read side. A location
+whose window has lapsed drops out of "nearby" map results, but the truck's
+own page (`/trucks/[slug]`) still shows it, with a muted "Last active X ago"
+label instead of the green "Active now" badge
+(`apps/web/components/location-status.tsx`, shared between both surfaces so
+they can't disagree on what "active" looks like).
+
+**Extend**: while a posted location is still active, the operator can push
+its expiry further out (same duration presets) without re-sharing GPS or
+touching the address — `extendLocationAction` →
+`apps/web/lib/locations.ts#extendLocation`. Once a location has actually
+expired, Extend is hidden and the operator must post fresh; the real
+enforcement of this is server-side (`extendLocation`'s `WHERE` clause only
+matches a still-current, still-unexpired row), not just the UI hiding the
+button.
+
+This is deliberately independent of `TruckSchedule` (the weekly posted-hours
+model, untouched by this feature) — "Active now" reflects whether the
+operator's self-declared presence window has lapsed, not whether the truck
+is inside its posted hours. That distinction is also why the label says
+"Active now" rather than "Open now."
+
+A server-side cap (`MAX_LOCATION_DURATION_HOURS = 48` in
+`@chomp/utils/location-freshness.ts`) bounds every `expiresAt`, on both the
+initial post and Extend, regardless of what the UI's preset list offers —
+the real trust boundary against "post once, stay active for a week."
+
 ## Truck switcher
 
 `/dashboard` lists every truck the signed-in user operates (owner or

@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-12
+2026-08-13 (location freshness + nearby-list-view, same day)
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list is closed — there is no single next-up item; the user should be asked what to prioritize next. The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list was closed as of the 2026-08-12 session. **This session (2026-08-13) built two more, back to back**: **location freshness / "Active now"** (roadmap item 0, see below and `/docs/features/operator-dashboard.md#location-updates`) — an operator posting a location now also declares how long they'll be there (presets 1h/2h/3h/4h/6h/All day, "All day" = end of local calendar day), and a truck whose window has lapsed drops out of "nearby" map results while still showing on its own direct-link page with a muted "last active" state instead of the green "Active now" badge; an Extend action lets an operator push the expiry out without re-sharing GPS, only while still active. No migration needed — `TruckLocation.expiresAt` already existed, unused, since the first migration. Then, once the user flagged it mid-session, **a nearby-trucks list view + filter/sort** (roadmap item 0b, see below and `/docs/features/map.md#list-view`) — a Map/List toggle on the root page showing the exact same filtered set the map does, sortable by distance/rating, filterable by cuisine/minimum rating; required first lifting `TruckMap`'s internal geolocation-refetch out into a new `TruckDiscovery` wrapper so a sibling list view could see the same data. Every item on the roadmap, including both items added this session, is closed as of now. The app is ready to run/deploy against real data.**
 
 ---
 
@@ -203,8 +203,191 @@ pnpm dev
 22. ~~Mobile-first nav (roadmap item 6)~~ — **done 2026-08-12**, see "This
     session (2026-08-12, mobile nav)" below and
     `/docs/features/navigation.md`. With this, every item on the whole
-    `future-plans/roadmap.md` list is closed. **Next up**: nothing
-    prioritized — ask the user what to build next.
+    `future-plans/roadmap.md` list is closed.
+23. ~~Location freshness / "Active now" (roadmap item 0)~~ — **done
+    2026-08-13**, see "This session (2026-08-13, location freshness)" below
+    and `/docs/features/operator-dashboard.md#location-updates`.
+24. ~~Nearby-trucks list view + filter/sort (roadmap item 0b)~~ — **done
+    2026-08-13**, same day, see "This session (2026-08-13, nearby list
+    view)" below and `/docs/features/map.md#list-view`. **Next up**: nothing
+    prioritized — every roadmap item is closed; ask the user what to build
+    next.
+
+## This session (2026-08-13, nearby list view)
+- **Built roadmap item 0b ("Nearby-trucks list view + filter/sort")**
+  straight from the plan scoped earlier the same session
+  (`future-plans/nearby-list-view-plan.md`), after a Q&A round that locked
+  in: a Map/List toggle on `/` (no new route); the list shows the **exact
+  same filtered set** the map does (verified/active/unexpired location) —
+  not a broader view, which meant "Active now first" sorting was considered
+  and dropped, since every truck in this list is already active by
+  construction; sort by Distance (default) or Rating; filter by cuisine
+  (dropdown from values actually in use, not a fixed taxonomy) and minimum
+  rating.
+- **Real architecture fix, done first per the plan**: `TruckMap` used to own
+  its geolocation-triggered refetch entirely internally (raw Mapbox refs,
+  not React state) — a list view had no way to see that data. New
+  `apps/web/components/truck-discovery.tsx` (client) now owns the truck
+  array, the geolocation effect (moved out of `TruckMap`), and the
+  Map/List toggle + filter/sort state. `TruckMap` became a controlled
+  component (`trucks`/`center` props, three separate `useEffect`s: mount,
+  re-render markers on `trucks` change, `flyTo` on `center` change) instead
+  of calling `getNearbyTrucksAction` itself. `app/page.tsx` now renders
+  `TruckDiscovery` instead of `TruckMap` directly.
+- **`getNearbyTrucks` gained a rating aggregate**: a `LEFT JOIN` subquery
+  over `reviews` (`AVG(rating)`/`COUNT(*)`, `WHERE is_visible = true` —
+  same rule `getReviewSummary` already applies, just written in raw SQL),
+  producing `averageRating`/`reviewCount` per truck. Needed for the rating
+  sort/filter and to actually show a rating in list rows — not derivable
+  client-side from data the query didn't already have.
+- **New `packages/utils/src/truck-list-filters.ts`**: `sortTrucks`
+  (distance ascending / rating descending, no-reviews trucks always sort
+  last regardless of direction), `filterTrucksByCuisine` (OR-match across a
+  multi-cuisine truck), `filterTrucksByMinRating` (excludes no-reviews
+  trucks, inclusive boundary), `getDistinctCuisines` (dedup + sort, drives
+  the cuisine dropdown from the already-fetched truck array, no separate
+  query). Also added `formatDistanceMiles` to `packages/utils/src/index.ts`
+  — no distance formatter existed anywhere in the codebase before this.
+  Full test coverage for all of the above.
+- **Filters apply to both views at once, sort only to the list**:
+  `TruckDiscovery` runs `filterTrucksByCuisine`/`filterTrucksByMinRating` on
+  the truck array before handing it to either `TruckMap` or `TruckList`, so
+  toggling between Map and List never shows a different truck set — only
+  `TruckList` additionally applies `sortTrucks`, since sort order has no map
+  equivalent.
+- **New `apps/web/components/truck-list.tsx`**: plain rows (distance,
+  cuisine, rating or "No reviews yet", a favorite toggle, link to the
+  truck's page). The favorite toggle (`ListFavoriteButton`) couldn't reuse
+  `TruckFavoriteButton`'s no-local-state pattern — that pattern relies on a
+  server-rendered prop refreshing via `revalidatePath`, but this list's
+  truck data lives in `TruckDiscovery`'s client-held state (from the
+  geolocation fetch), which nothing automatically re-fetches after a
+  toggle. Uses local `useState` instead, same reasoning already applied to
+  the map popup's favorite button, just via real React state since this
+  isn't raw DOM.
+- **New `apps/web/components/truck-list-controls.tsx`**: sort-by
+  `<select>`, cuisine multi-select buttons, minimum-rating preset buttons
+  (3.0+/4.0+/4.5+/Any) — visually matches `LocationDurationPicker`'s
+  existing button-group pattern from the location-freshness session
+  immediately before this one.
+- **Verified against the real dev DB, not just mocked** — this environment
+  had live Neon/Mapbox credentials available (unlike most prior sessions):
+  re-ran the existing `apps/web/e2e/map.spec.ts` after the `TruckMap`
+  refactor to confirm the geolocation-granted marker flow wasn't regressed
+  (passed), then wrote and ran a throwaway Playwright test (deleted after,
+  never committed) toggling to List and asserting real row content —
+  confirmed distance/cuisine/rating all render correctly
+  (`Taco Kings 0.0 mi · mexican · ★ 5.0 (1)`) and the toggle works both
+  directions.
+- **Tests**: new `packages/utils/src/truck-list-filters.test.ts` (14 tests)
+  and an added `formatDistanceMiles` case in `index.test.ts`; extended
+  `apps/web/lib/trucks.test.ts` (+2 — the rating-aggregate SQL shape and an
+  updated row fixture). Full `pnpm --filter web test`: 371/371 passing. Full
+  `pnpm --filter web exec tsc --noEmit`: clean. Real `pnpm --filter web
+  build`: clean; reverted the incidental `tsconfig.json` mutation, same as
+  every prior session. No new component-level unit tests for
+  `TruckDiscovery`/`TruckList`/`TruckListControls` themselves — no test file
+  existed for `TruckMap` either before this session, consistent with this
+  repo's existing pattern of covering the pure/data layers with Vitest and
+  the interactive layer with e2e (or, here, manual real-DB verification).
+- **Not yet done / next session**: no dedicated list-view e2e test was
+  added to the committed suite (the verification script above was
+  throwaway) — worth adding if this page's interaction surface grows
+  further. View/sort/filter selections aren't reflected in the URL, so
+  there's no way to share a filtered link yet — flagged as a scope cut in
+  `docs/features/map.md`, not an oversight. None of this session's changes
+  (both the location-freshness work and this) are committed to git yet —
+  left as unstaged for review, same pattern as prior sessions.
+
+## This session (2026-08-13, location freshness)
+- **Built roadmap item 0 ("Location freshness / 'Active now'")** straight
+  from the fully-scoped plan written and approved the prior session
+  (`future-plans/location-freshness-plan.md`) — no new product Q&A needed,
+  the plan's locked-in decisions (hide expired trucks from "nearby" only,
+  read-time computation with no background job, required duration on every
+  post with presets 1h/2h/3h/4h/6h/All day, Extend while still active only,
+  48h server-side cap) were followed as written. Built in the plan's own
+  sequencing order (utils → types → write path & read path in parallel → UI
+  → docs).
+- **User also flagged a second idea this session** — a nearby-trucks list
+  view sorted by distance, plus other filter/sort options (cuisine, rating,
+  etc.) — assessed as safe to build later (mostly additive, reuses
+  `getNearbyTrucks`'s existing PostGIS distance calc, no schema change
+  anticipated) and deliberately **not built**, only flagged in
+  `future-plans/roadmap.md` (new item 0b) per the user's explicit choice to
+  jot it down and proceed with location freshness first.
+- **No migration needed** — `TruckLocation.expiresAt` already existed
+  (unused) since the very first migration; this session only started
+  writing/reading it.
+- **New `packages/utils/src/location-freshness.ts`**: `DURATION_PRESETS`
+  (1h/2h/3h/4h/6h/allDay), `endOfLocalDay`/`expiresAtForPreset` (allDay
+  resolves to end of local calendar day, computed client-side, not a
+  no-expiry sentinel), `MAX_LOCATION_DURATION_HOURS = 48` +
+  `isValidExpiresAt` (rejects unparseable/non-future/>48h-out — the real
+  server-side abuse guard, called from both the post and extend write
+  paths), `isLocationActive` (null `expiresAt` = always active; exclusive
+  comparison, matching the read-time SQL's `expires_at > now()`). Full test
+  coverage including the just-after-midnight `allDay` edge case.
+- **Types** (`packages/types`): `PostLocationInput.expiresAt` (required ISO
+  string); `TruckDetail.locationReportedAt`/`locationExpiresAt` — deliberately
+  raw timestamps, not a precomputed boolean, so the UI's existing `timeAgo`
+  need and the freshness check share one source of truth instead of two that
+  could disagree.
+- **Write path** (`apps/web/lib/locations.ts`): `postLocation` now validates
+  and stores `expiresAt`; new `extendLocation(truckId, expiresAt)` — a single
+  conditional `updateMany` (`WHERE isCurrent = true AND (expiresAt IS NULL OR
+  expiresAt > now())`) is the actual enforcement that an expired location
+  can't be revived by extension, not just a UI gate; throws when it matches
+  zero rows. `extendLocationAction` mirrors `postLocationAction`'s
+  auth-gate + `revalidatePath` shape.
+- **Read path** (`apps/web/lib/trucks.ts`): `getNearbyTrucks`'s `JOIN
+  truck_locations` gained `AND (tl.expires_at IS NULL OR tl.expires_at >
+  now())`. `getTruckBySlug`'s `locations` include is deliberately
+  **unchanged** (still just `isCurrent: true`) — the truck's own page must
+  keep showing last-known info even when stale; only reads `reportedAt`/
+  `expiresAt` off the existing row.
+- **UI**: `components/location-status.tsx` (new, shared, no client
+  directive needed) — one component used by both the customer-facing truck
+  page and the operator's own dashboard form so they can't drift on what
+  "active" looks like; renders nothing with no current location, a green
+  "Active now — until {time}" badge if `isLocationActive`, else a muted
+  "Last active {timeAgo}" line. `components/dashboard/location-duration-picker.tsx`
+  (new) — reused for both the initial post and Extend.
+  `components/dashboard/truck-location-form.tsx` rewritten: required
+  duration selection before submit, new Extend section shown only when
+  `currentLocation && isLocationActive(currentLocation.expiresAt)`.
+  `app/trucks/[slug]/page.tsx`: address block's gate switched from
+  `currentAddress` to `locationReportedAt` — bundled fix, called out
+  explicitly rather than silently: a coords-only post with no address text
+  previously showed nothing at all; now it correctly shows the freshness
+  status even without an address line.
+- **Tests**: new `packages/utils/src/location-freshness.test.ts` (17 tests);
+  extended `apps/web/lib/locations.test.ts` (+7, including `extendLocation`'s
+  three cases) and `apps/web/app/actions/locations.test.ts` (+2, mirroring
+  `postLocationAction`'s existing shape); extended `apps/web/lib/trucks.test.ts`
+  (+3 — the freshness SQL condition, `locationReportedAt`/`locationExpiresAt`
+  mapping, and the no-current-row null case). Full `pnpm --filter web test`:
+  370/370 passing. Full `pnpm --filter web exec tsc --noEmit`: clean. Real
+  `pnpm --filter web build`: clean; reverted the incidental `tsconfig.json`
+  mutation, same as every prior session.
+- **E2e deliberately skipped**, per the plan: genuinely not practical
+  without a clock-mocking harness this repo doesn't have, and no
+  authenticated-operator e2e fixture exists yet either (same gap noted in
+  the mobile-nav session). Unit tests carry the correctness burden.
+- **Not yet done / next session**: no browser session was available in this
+  environment, so a full manual click-through (post a short-duration
+  location, confirm "Active now" on both the dashboard and public page,
+  confirm map presence, use Extend, verify the hide-on-expiry path via a
+  direct DB timestamp edit) is still owed — same standing gap noted for
+  every other interactive flow in this project's history. No seed-data
+  enhancement was added (plan's optional step 7, non-blocking) — a seeded
+  truck with a realistic future `expires_at` and one already-expired would
+  help local-dev demo fidelity of the hide-from-map behavior, worth doing
+  whenever someone's poking at this locally. The nearby-trucks list
+  view + filter/sort idea (roadmap item 0b) needs its own product Q&A before
+  a real plan gets written — see that roadmap entry for what's already
+  known. None of this session's changes are committed to git yet — left as
+  unstaged for review, same pattern as prior sessions.
 
 ## This session (2026-08-12, mobile nav)
 - **Closed roadmap item 6 ("App navigation — mobile-first")** — the last

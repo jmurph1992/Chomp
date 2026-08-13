@@ -33,6 +33,8 @@ type NearbyTruckRow = {
   lng: number
   distanceMeters: number
   isFavorited: boolean
+  averageRating: number | null
+  reviewCount: number
 }
 
 /**
@@ -66,10 +68,19 @@ export async function getNearbyTrucks(
       ST_Y(tl.geom::geometry) AS "lat",
       ST_X(tl.geom::geometry) AS "lng",
       ST_Distance(tl.geom, ST_MakePoint(${lng}, ${lat})::geography) AS "distanceMeters",
-      (tf.user_id IS NOT NULL) AS "isFavorited"
+      (tf.user_id IS NOT NULL) AS "isFavorited",
+      r.avg_rating AS "averageRating",
+      COALESCE(r.review_count, 0)::int AS "reviewCount"
     FROM trucks t
     JOIN truck_locations tl ON tl.truck_id = t.id AND tl.is_current = true
+      AND (tl.expires_at IS NULL OR tl.expires_at > now())
     LEFT JOIN truck_favorites tf ON tf.truck_id = t.id AND tf.user_id = ${viewerId ?? null}
+    LEFT JOIN (
+      SELECT truck_id, AVG(rating)::float AS avg_rating, COUNT(*) AS review_count
+      FROM reviews
+      WHERE is_visible = true
+      GROUP BY truck_id
+    ) r ON r.truck_id = t.id
     WHERE t.is_active = true
       AND t.verification_status = 'verified'
       AND ST_DWithin(tl.geom, ST_MakePoint(${lng}, ${lat})::geography, ${radius})
@@ -124,6 +135,8 @@ export async function getTruckBySlug(
     logoUrl: truck.logoUrl,
     coverUrl: truck.coverUrl,
     currentAddress: currentLocation?.address ?? null,
+    locationReportedAt: currentLocation?.reportedAt.toISOString() ?? null,
+    locationExpiresAt: currentLocation?.expiresAt?.toISOString() ?? null,
     isFavorited: truck.favorites.length > 0,
     schedule: truck.schedules.map((s) => ({
       id: s.id,

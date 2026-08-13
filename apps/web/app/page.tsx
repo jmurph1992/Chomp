@@ -1,4 +1,4 @@
-import { TruckMap } from '@/components/truck-map'
+import { TruckDiscovery } from '@/components/truck-discovery'
 import { getNearbyTrucks } from '@/lib/trucks'
 import { getCurrentUser } from '@/lib/auth'
 import { DEFAULT_LOCATION, DEFAULT_RADIUS_METERS } from '@/lib/geo'
@@ -25,7 +25,7 @@ export default async function HomePage() {
     <main className="flex min-h-screen flex-col p-8">
       <h1 className="text-4xl font-bold">Chomp 🍔</h1>
       <p className="mt-2 mb-6 text-lg text-gray-500">Food trucks near you.</p>
-      <TruckMap
+      <TruckDiscovery
         initialTrucks={trucks}
         defaultCenter={DEFAULT_LOCATION}
         viewerSignedIn={!!currentUser}

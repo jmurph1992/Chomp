@@ -3,15 +3,34 @@
 > Not go-live blockers (those live in `/go-live-requirements/`) — this is the
 > broader list of what's next, grouped by theme. Updated as priorities shift.
 
-## 0. Location freshness / "Active now" — planned, not yet built (2026-08-12)
+## 0. Location freshness / "Active now" — done 2026-08-13
 Flagged during a product gap-analysis against the app's core "find food
 trucks near you" use case: a truck's posted location shows indefinitely
 today, with no signal for whether it's actually still there.
-Fully scoped — an operator declares how long they'll be at a location when
-posting it (presets: 1h/2h/3h/4h/6h/All day), and trucks whose window has
-lapsed drop out of "nearby" map results while still being reachable via
-direct link/favorites/feed. Full technical plan, ready to build straight
-from: `future-plans/location-freshness-plan.md`.
+An operator declares how long they'll be at a location when posting it
+(presets: 1h/2h/3h/4h/6h/All day — "All day" = end of local calendar day),
+and trucks whose window has lapsed drop out of "nearby" map results while
+still being reachable via direct link/favorites/feed, showing a muted "last
+active" state instead. Extend lets an operator push the expiry out without
+re-sharing GPS, only while still active. See
+`/docs/features/operator-dashboard.md#location-updates`,
+`/docs/features/map.md`, `/docs/features/truck-detail.md`. Built from
+`future-plans/location-freshness-plan.md`.
+
+## 0b. Nearby-trucks list view + filter/sort — done 2026-08-13
+User idea while reviewing the location-freshness plan (0, above). A Map/List
+toggle on the root page (`/`, no new route), showing the exact same filtered
+set the map does (verified/active/unexpired location — "Active now first"
+sorting was considered and dropped during scoping, since every truck in this
+list is already active by construction). Sortable by distance (default) or
+rating; filterable by cuisine (dropdown built from values actually in use,
+not a fixed taxonomy) and minimum rating, applied to both views at once.
+Required a real small refactor first: `TruckMap` used to own its
+geolocation-refetch internally with no way for a sibling to see the result —
+a new `TruckDiscovery` client wrapper now owns that state, and `TruckMap`
+became a controlled component. `getNearbyTrucks` gained a `LEFT JOIN`
+aggregate for per-truck rating. See `/docs/features/map.md#list-view`. Built
+from `future-plans/nearby-list-view-plan.md`.
 
 ## 1. Make local dev solid — done 2026-08-04
 - ~~Local Clerk webhooks can't reach `localhost`~~ — documented the

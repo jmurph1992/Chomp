@@ -4,12 +4,17 @@ import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import type { TruckMapMarker } from '@chomp/types'
-import { getNearbyTrucksAction } from '@/app/actions/trucks'
 import { favoriteTruckAction, unfavoriteTruckAction } from '@/app/actions/favorites'
 
 type Props = {
-  initialTrucks: TruckMapMarker[]
+  /** Controlled — the current (possibly filtered/geolocation-refreshed) truck set.
+   * Ownership of fetching lives in TruckDiscovery, not here, so the same data can
+   * also drive the list view. */
+  trucks: TruckMapMarker[]
   defaultCenter: { lat: number; lng: number }
+  /** Set once geolocation resolves — triggers a flyTo, distinct from the marker
+   * data itself since trucks can change (e.g. filtering) without the camera moving. */
+  center: { lat: number; lng: number } | null
   /** Whether to render a favorite toggle in each popup at all — resolved once,
    * server-side, since there's no React context inside a Mapbox popup to
    * check <SignedIn> against. */
@@ -84,11 +89,14 @@ function buildPopupContent(truck: TruckMapMarker, viewerSignedIn: boolean): HTML
   return container
 }
 
-export function TruckMap({ initialTrucks, defaultCenter, viewerSignedIn }: Props) {
+export function TruckMap({ trucks, defaultCenter, center, viewerSignedIn }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const markersRef = useRef<mapboxgl.Marker[]>([])
 
+  // Mount once — creates the map and renders whatever trucks/viewerSignedIn
+  // are current at mount time. Subsequent updates are handled by the two
+  // effects below, keyed on the props that actually change over time.
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
     if (!token || !containerRef.current) return
@@ -102,29 +110,28 @@ export function TruckMap({ initialTrucks, defaultCenter, viewerSignedIn }: Props
     })
     mapRef.current = map
 
-    renderMarkers(map, markersRef, initialTrucks, viewerSignedIn)
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords
-          map.flyTo({ center: [longitude, latitude], zoom: 12 })
-          const trucks = await getNearbyTrucksAction(latitude, longitude)
-          renderMarkers(map, markersRef, trucks, viewerSignedIn)
-        },
-        () => {
-          // Permission denied or unavailable — keep the default-region results.
-        },
-        { timeout: 8000 },
-      )
-    }
+    renderMarkers(map, markersRef, trucks, viewerSignedIn)
 
     return () => {
       markersRef.current.forEach((marker) => marker.remove())
       map.remove()
+      mapRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Re-render markers whenever the (possibly filtered/refreshed) truck set changes.
+  useEffect(() => {
+    if (!mapRef.current) return
+    renderMarkers(mapRef.current, markersRef, trucks, viewerSignedIn)
+  }, [trucks, viewerSignedIn])
+
+  // Fly to the viewer's real location once geolocation resolves — independent
+  // of trucks changing, since filtering shouldn't move the camera.
+  useEffect(() => {
+    if (!mapRef.current || !center) return
+    mapRef.current.flyTo({ center: [center.lng, center.lat], zoom: 12 })
+  }, [center])
 
   if (!process.env.NEXT_PUBLIC_MAPBOX_TOKEN) {
     return (

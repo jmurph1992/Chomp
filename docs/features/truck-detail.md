@@ -13,6 +13,19 @@ schedule. Logo and cover render via `next/image` with `unoptimized` (see
 Images below) — added this pass; they existed as fields since the operator
 dashboard but were never actually rendered on the public page until now.
 
+**Location freshness**: the address block is gated on
+`truck.locationReportedAt` (non-null iff a current location row exists at
+all), not `currentAddress` — a coords-only post with no address text
+entered still shows a status, it just skips the address line.
+`<LocationStatus>` (`apps/web/components/location-status.tsx`) renders a
+green "Active now — until {time}" badge when `isLocationActive(expiresAt)`
+(the operator's declared presence window hasn't lapsed), or a muted "Last
+active {timeAgo}" line otherwise. Unlike the map, an expired location still
+shows here — this page is reachable via direct link, favorites, or the feed
+regardless of freshness; only "nearby" results hide it. See
+[`/docs/features/operator-dashboard.md#location-updates`](./operator-dashboard.md#location-updates)
+for the write side.
+
 **Scope cut**: no computed "open now" boolean — the schema has no per-truck
 timezone, so schedule times are shown as plain text
 (`apps/web/lib/schedule.ts#getTodaysScheduleEntries`) instead of a
