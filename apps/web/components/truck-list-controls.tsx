@@ -12,6 +12,9 @@ type Props = {
   onSelectedCuisinesChange: (cuisines: string[]) => void
   minRating: number | null
   onMinRatingChange: (minRating: number | null) => void
+  viewerSignedIn: boolean
+  onlyFavorites: boolean
+  onOnlyFavoritesChange: (onlyFavorites: boolean) => void
 }
 
 /** Filters apply to both the map and the list (see TruckDiscovery) — this
@@ -24,6 +27,9 @@ export function TruckListControls({
   onSelectedCuisinesChange,
   minRating,
   onMinRatingChange,
+  viewerSignedIn,
+  onlyFavorites,
+  onOnlyFavoritesChange,
 }: Props) {
   function toggleCuisine(cuisine: string) {
     onSelectedCuisinesChange(
@@ -86,6 +92,19 @@ export function TruckListControls({
           </button>
         ))}
       </div>
+
+      {viewerSignedIn && (
+        <button
+          type="button"
+          aria-pressed={onlyFavorites}
+          onClick={() => onOnlyFavoritesChange(!onlyFavorites)}
+          className={`rounded border px-2 py-1 ${
+            onlyFavorites ? 'border-gray-900 bg-gray-900 text-white' : ''
+          }`}
+        >
+          My favorites
+        </button>
+      )}
     </div>
   )
 }

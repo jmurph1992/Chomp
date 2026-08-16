@@ -1,3 +1,9 @@
+import { sendEmail } from '@/lib/email'
+import {
+  activationEmailHtml,
+  getOptedInFavoriterEmails,
+  getTruckNameAndSlug,
+} from '@/lib/favorite-notifications'
 import { refreshFeedView } from '@/lib/feed'
 import { openErasureBlockedEntry } from '@/lib/moderation-queue'
 import { removeAllPhotoLikesForUser } from '@/lib/review-photos'
@@ -56,4 +62,47 @@ export async function eraseUserHandler({ step, event }: { step: StepLike; event:
 export const eraseUserFunction = inngest.createFunction(
   { id: 'erase-user', name: 'Erase a deleted Clerk user', triggers: [{ event: 'app/user.deleted' }] },
   eraseUserHandler,
+)
+
+type TruckActivatedEvent = { data: { truckId: string } }
+
+/**
+ * Fired from lib/locations.ts#postLocation only on a real off->on
+ * transition — never on a same-window re-post or extendLocation. Recipients
+ * are resolved fresh here, not carried on the event, so a favorite/opt-out
+ * change between the event firing and this running is naturally respected.
+ */
+export async function notifyFavoritesOnActivationHandler({
+  step,
+  event,
+}: {
+  step: StepLike
+  event: TruckActivatedEvent
+}): Promise<void> {
+  const truck = await step.run('load-truck', () => getTruckNameAndSlug(event.data.truckId))
+  if (!truck) return // deleted between activation and this running
+
+  const recipients = await step.run('load-opted-in-favoriters', () =>
+    getOptedInFavoriterEmails(event.data.truckId),
+  )
+  if (recipients.length === 0) return
+
+  // allSettled, not all — one recipient's failed send shouldn't fail the
+  // whole run and trigger an Inngest retry that re-emails everyone else.
+  await step.run('send-emails', () =>
+    Promise.allSettled(
+      recipients.map((email) =>
+        sendEmail({ to: email, subject: `${truck.name} is active now`, html: activationEmailHtml(truck) }),
+      ),
+    ),
+  )
+}
+
+export const notifyFavoritesOnActivationFunction = inngest.createFunction(
+  {
+    id: 'notify-favorites-on-activation',
+    name: 'Notify favoriters when a truck goes active',
+    triggers: [{ event: 'app/truck.activated' }],
+  },
+  notifyFavoritesOnActivationHandler,
 )

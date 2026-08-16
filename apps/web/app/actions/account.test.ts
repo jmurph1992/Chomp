@@ -3,12 +3,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 const getCurrentUser = vi.fn()
 const deleteClerkUser = vi.fn()
 const findSoleOwnedTrucks = vi.fn()
+const userUpdate = vi.fn()
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/clerk-admin', () => ({ deleteClerkUser }))
 vi.mock('@/lib/user-erasure', () => ({ findSoleOwnedTrucks }))
+vi.mock('@chomp/db', () => ({ db: { user: { update: userUpdate } } }))
 
-const { deleteOwnAccountAction } = await import('./account')
+const { deleteOwnAccountAction, updateNotificationPreferenceAction } = await import('./account')
 
 describe('deleteOwnAccountAction', () => {
   beforeEach(() => {
@@ -55,5 +57,40 @@ describe('deleteOwnAccountAction', () => {
     expect(findSoleOwnedTrucks).toHaveBeenCalledWith('u1')
     expect(deleteClerkUser).toHaveBeenCalledWith('clerk_1')
     expect(deleteClerkUser).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('updateNotificationPreferenceAction', () => {
+  beforeEach(() => {
+    getCurrentUser.mockReset()
+    userUpdate.mockReset()
+  })
+
+  it('rejects when signed out, without touching the database', async () => {
+    getCurrentUser.mockResolvedValue(null)
+    await expect(updateNotificationPreferenceAction(true)).rejects.toThrow('Sign in required')
+    expect(userUpdate).not.toHaveBeenCalled()
+  })
+
+  it('updates only the caller\'s own row, never a passed-in id', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'u1', email: 'ada@example.com', clerkId: 'clerk_1' })
+
+    await updateNotificationPreferenceAction(true)
+
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { notifyFavoriteActive: true },
+    })
+  })
+
+  it('can turn the preference back off', async () => {
+    getCurrentUser.mockResolvedValue({ id: 'u1', email: 'ada@example.com', clerkId: 'clerk_1' })
+
+    await updateNotificationPreferenceAction(false)
+
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { notifyFavoriteActive: false },
+    })
   })
 })

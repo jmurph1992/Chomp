@@ -1,5 +1,6 @@
 'use server'
 
+import { db } from '@chomp/db'
 import { getCurrentUser } from '@/lib/auth'
 import { deleteClerkUser } from '@/lib/clerk-admin'
 import { findSoleOwnedTrucks } from '@/lib/user-erasure'
@@ -31,4 +32,16 @@ export async function deleteOwnAccountAction(confirmedEmail: string): Promise<vo
   }
 
   await deleteClerkUser(user.clerkId)
+}
+
+/**
+ * No target-userId parameter, by design — same IDOR-free pattern as
+ * deleteOwnAccountAction above: this can only ever touch the caller's own
+ * row, never anyone else's.
+ */
+export async function updateNotificationPreferenceAction(notifyFavoriteActive: boolean): Promise<void> {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('Sign in required')
+
+  await db.user.update({ where: { id: user.id }, data: { notifyFavoriteActive } })
 }

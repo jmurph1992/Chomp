@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { TruckMapMarker } from '@chomp/types'
 import {
   filterTrucksByCuisine,
+  filterTrucksByFavorite,
   filterTrucksByMinRating,
   getDistinctCuisines,
   sortTrucks,
@@ -33,6 +34,7 @@ export function TruckDiscovery({ initialTrucks, defaultCenter, viewerSignedIn }:
   const [sortBy, setSortBy] = useState<TruckSortBy>('distance')
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([])
   const [minRating, setMinRating] = useState<number | null>(null)
+  const [onlyFavorites, setOnlyFavorites] = useState(false)
 
   useEffect(() => {
     if (!navigator.geolocation) return
@@ -54,7 +56,10 @@ export function TruckDiscovery({ initialTrucks, defaultCenter, viewerSignedIn }:
   // doesn't shrink as other filters narrow the visible trucks.
   const cuisineOptions = getDistinctCuisines(trucks)
 
-  const visibleTrucks = filterTrucksByMinRating(filterTrucksByCuisine(trucks, selectedCuisines), minRating)
+  const visibleTrucks = filterTrucksByFavorite(
+    filterTrucksByMinRating(filterTrucksByCuisine(trucks, selectedCuisines), minRating),
+    viewerSignedIn && onlyFavorites,
+  )
 
   return (
     <div>
@@ -88,6 +93,9 @@ export function TruckDiscovery({ initialTrucks, defaultCenter, viewerSignedIn }:
           onSelectedCuisinesChange={setSelectedCuisines}
           minRating={minRating}
           onMinRatingChange={setMinRating}
+          viewerSignedIn={viewerSignedIn}
+          onlyFavorites={onlyFavorites}
+          onOnlyFavoritesChange={setOnlyFavorites}
         />
       </div>
 

@@ -67,6 +67,7 @@ describe('getNearbyTrucks', () => {
         lng: -97.74,
         distanceMeters: 500,
         isFavorited: false,
+        hasFavoritedMenuItem: false,
         averageRating: 4.5,
         reviewCount: 12,
       },
@@ -127,6 +128,20 @@ describe('getNearbyTrucks', () => {
 
     const call = queryRaw.mock.calls.at(0) ?? []
     expect(call).toContain(null)
+  })
+
+  it('uses an EXISTS subquery (not a JOIN) to check menu-item favorites, so truck cardinality stays one row per truck', async () => {
+    queryRaw.mockResolvedValue([])
+    await getNearbyTrucks(30.2672, -97.7431, 5000, 'u1')
+
+    const call = queryRaw.mock.calls.at(0) ?? []
+    const sql = (call.at(0) as string[]).join('')
+    expect(sql).toContain('EXISTS')
+    expect(sql).toContain('menu_item_favorites')
+    expect(sql).toContain('hasFavoritedMenuItem')
+    // viewerId is interpolated twice now (truck_favorites join + this
+    // subquery) — both should carry the real viewer id, not just one.
+    expect(call.filter((v) => v === 'u1')).toHaveLength(2)
   })
 })
 

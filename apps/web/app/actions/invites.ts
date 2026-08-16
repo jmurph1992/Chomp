@@ -14,6 +14,7 @@ import {
 } from '@/lib/invites'
 import { requireOperator } from '@/lib/operators'
 import { checkRateLimit, inviteLimiter } from '@/lib/rate-limit'
+import { appUrl } from '@/lib/site-url'
 import type { TruckInviteView } from '@chomp/types'
 
 /**
@@ -26,10 +27,6 @@ async function requireOwner(truckId: string) {
   const { user, role } = await requireOperator(truckId)
   if (role !== 'owner') throw new Error('Only the truck owner can do this')
   return user
-}
-
-function appUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 }
 
 export async function createInviteAction(

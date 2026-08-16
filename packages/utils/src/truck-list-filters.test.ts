@@ -3,6 +3,7 @@ import {
   sortTrucks,
   filterTrucksByCuisine,
   filterTrucksByMinRating,
+  filterTrucksByFavorite,
   getDistinctCuisines,
 } from './truck-list-filters'
 
@@ -74,6 +75,31 @@ describe('filterTrucksByMinRating', () => {
   it('excludes a truck below the threshold', () => {
     const result = filterTrucksByMinRating([truckA], 4.5)
     expect(result).toEqual([])
+  })
+})
+
+describe('filterTrucksByFavorite', () => {
+  const favoritedTruck = { id: 'x', isFavorited: true, hasFavoritedMenuItem: false }
+  const favoritedViaItem = { id: 'y', isFavorited: false, hasFavoritedMenuItem: true }
+  const notFavorited = { id: 'z', isFavorited: false, hasFavoritedMenuItem: false }
+
+  it('returns all trucks unchanged when onlyFavorites is false', () => {
+    const all = [favoritedTruck, favoritedViaItem, notFavorited]
+    expect(filterTrucksByFavorite(all, false)).toEqual(all)
+  })
+
+  it('matches a truck favorited directly', () => {
+    const result = filterTrucksByFavorite([favoritedTruck, notFavorited], true)
+    expect(result.map((t) => t.id)).toEqual(['x'])
+  })
+
+  it('matches a truck favorited only via a menu item', () => {
+    const result = filterTrucksByFavorite([favoritedViaItem, notFavorited], true)
+    expect(result.map((t) => t.id)).toEqual(['y'])
+  })
+
+  it('excludes a truck with neither', () => {
+    expect(filterTrucksByFavorite([notFavorited], true)).toEqual([])
   })
 })
 

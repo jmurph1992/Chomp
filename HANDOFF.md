@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-13 (location freshness + nearby-list-view + gap-analysis/get-directions, same day)
+2026-08-16 (favorites filter + Resend plumbing + favorite-activation notifications, same day)
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list was closed as of the 2026-08-12 session. **This session (2026-08-13) built two more, back to back**: **location freshness / "Active now"** (roadmap item 0, see below and `/docs/features/operator-dashboard.md#location-updates`) — an operator posting a location now also declares how long they'll be there (presets 1h/2h/3h/4h/6h/All day, "All day" = end of local calendar day), and a truck whose window has lapsed drops out of "nearby" map results while still showing on its own direct-link page with a muted "last active" state instead of the green "Active now" badge; an Extend action lets an operator push the expiry out without re-sharing GPS, only while still active. No migration needed — `TruckLocation.expiresAt` already existed, unused, since the first migration. Then, once the user flagged it mid-session, **a nearby-trucks list view + filter/sort** (roadmap item 0b, see below and `/docs/features/map.md#list-view`) — a Map/List toggle on the root page showing the exact same filtered set the map does, sortable by distance/rating, filterable by cuisine/minimum rating; required first lifting `TruckMap`'s internal geolocation-refetch out into a new `TruckDiscovery` wrapper so a sibling list view could see the same data. **Then, at the user's request, a second product gap-analysis pass** (roadmap item 7, a-h) re-surfaced 8 candidate gaps — the closest match to a named-but-unbuilt original scope item is `TruckEvent` (special appearances/events, fully modeled in the schema, explicitly commented "Planned feature — not yet wired to the UI," never scoped this session); the one item actually built this session is **b, a "Get Directions" link** on the truck detail page (Google Maps universal link, address-preferred with a coordinate fallback) — caught and fixed a real bug along the way (this schema has no `@db.Uuid` on any id column, so a `::uuid` cast broke a new raw-SQL `WHERE` comparison; found via a real Playwright run against the live dev DB, not unit tests). Items 0, 0b, and 7b are closed; the rest of item 7 (a, c-h) is flagged in the roadmap but not yet scoped. The app is ready to run/deploy against real data.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list was closed as of the 2026-08-12 session. **This session (2026-08-13) built two more, back to back**: **location freshness / "Active now"** (roadmap item 0, see below and `/docs/features/operator-dashboard.md#location-updates`) — an operator posting a location now also declares how long they'll be there (presets 1h/2h/3h/4h/6h/All day, "All day" = end of local calendar day), and a truck whose window has lapsed drops out of "nearby" map results while still showing on its own direct-link page with a muted "last active" state instead of the green "Active now" badge; an Extend action lets an operator push the expiry out without re-sharing GPS, only while still active. No migration needed — `TruckLocation.expiresAt` already existed, unused, since the first migration. Then, once the user flagged it mid-session, **a nearby-trucks list view + filter/sort** (roadmap item 0b, see below and `/docs/features/map.md#list-view`) — a Map/List toggle on the root page showing the exact same filtered set the map does, sortable by distance/rating, filterable by cuisine/minimum rating; required first lifting `TruckMap`'s internal geolocation-refetch out into a new `TruckDiscovery` wrapper so a sibling list view could see the same data. **Then, at the user's request, a second product gap-analysis pass** (roadmap item 7, a-h) re-surfaced 8 candidate gaps — the closest match to a named-but-unbuilt original scope item is `TruckEvent` (special appearances/events, fully modeled in the schema, explicitly commented "Planned feature — not yet wired to the UI," never scoped this session); the one item actually built this session is **b, a "Get Directions" link** on the truck detail page (Google Maps universal link, address-preferred with a coordinate fallback) — caught and fixed a real bug along the way (this schema has no `@db.Uuid` on any id column, so a `::uuid` cast broke a new raw-SQL `WHERE` comparison; found via a real Playwright run against the live dev DB, not unit tests). Items 0, 0b, and 7b are closed; the rest of item 7 (a, c-h) is flagged in the roadmap but not yet scoped. The app is ready to run/deploy against real data. **This session (2026-08-16)** scoped and built two more of item 7's smaller gaps: **item 7g, a "show only my favorites" filter** (signed-in only, matches a truck favorited directly or via any of its menu items, `getNearbyTrucks` gained `hasFavoritedMenuItem` kept deliberately separate from `isFavorited` — see below and `/docs/features/map.md#my-favorites-filter`), and **Resend plumbing** (`apps/web/lib/email.ts`, a bare `sendEmail()` foundation with no product consumer yet, sending from Resend's shared test domain — see below and `/docs/features/email.md`) as a shared prerequisite for items 7d and 7h. The Resend plumbing was manually verified end-to-end (a scoped "Sending access only" API key, real send confirmed) — along the way, discovered Resend's shared test domain only delivers to the account's own registered email until a domain is verified, documented in `/docs/features/email.md` for whoever tests 7h next. **Then, same session, item 7d itself got scoped and built**: opt-in (off by default, toggled on `/account`) email to a truck's direct favoriters when it goes "Active now," firing only on a real off→on activation transition, delivered async via a new Inngest event/function pair — see below and `/docs/features/favorite-notifications.md`. A new migration (`20260816225240_add_notify_favorite_active`) was presented and approved before running. Item 7h remains unscoped.**
 
 ---
 
@@ -220,6 +220,128 @@ pnpm dev
     was found — a named original-scope capability (`TruckEvent`) sitting
     fully dead in the schema — worth asking the user if that's next, or
     picking from the rest of item 7.
+
+## This session (2026-08-16, favorites filter + Resend plumbing)
+- **Scoped two of roadmap item 7's smaller, previously-unscoped gaps** (g and
+  the Resend prerequisite for d/h) with the user, then built both. Full
+  scoping discussion and rejected alternatives are in
+  `future-plans/roadmap.md`'s "Product gap-analysis findings" section and
+  `/docs/features/map.md`/`/docs/features/email.md`; not repeated here.
+- **Item 7g, "show only my favorites" filter** — most of the groundwork
+  (`isFavorited` on `TruckMapMarker`, `viewerId` threaded end-to-end through
+  `TruckDiscovery`) already existed from the 0b list-view session; this
+  session added `hasFavoritedMenuItem` (an `EXISTS` subquery in
+  `getNearbyTrucks`, not a `JOIN` — a `JOIN` against `menu_items` would fan
+  out one row per menu item per truck and break the query's
+  one-row-per-truck cardinality), the pure `filterTrucksByFavorite`
+  (`@chomp/utils/truck-list-filters.ts`), and a signed-in-only toggle in
+  `TruckListControls`. Deliberately did **not** redefine `isFavorited` to
+  include menu-item favorites — that would've made the truck-level favorite
+  toggle button silently no-op whenever a truck was only ever favorited via
+  one of its items. Also deliberately did **not** auto-favorite a truck when
+  a menu item is favorited (a user idea raised mid-session) — rejected
+  because unfavoriting the item would leave ambiguous truck-favorite state,
+  and it would dilute `/account`'s explicit-favorites list.
+- **Resend plumbing** — `apps/web/lib/email.ts`'s `sendEmail()`, modeled on
+  `lib/storage.ts`'s lazily-constructed-client pattern. New `resend` npm
+  dependency in `apps/web`. Sends from Resend's shared test domain
+  (`onboarding@resend.dev`, new `RESEND_FROM_EMAIL` env var) — no DNS setup
+  needed for this round, swap to a real Chomp domain once a real product
+  email (item 7d or 7h) actually ships. **No product consumer built this
+  session** — this was scoped and approved as infrastructure-only.
+- **Manual verification completed, same session, after the user created a
+  new "Sending access only" API key scoped to Chomp.** A throwaway local
+  script (`node --env-file=.env.local`, never committed, deleted right
+  after) confirmed a real send. Along the way, found that Resend's shared
+  test domain will only deliver to the Resend *account's own* registered
+  email, not an arbitrary `to` — so the first test send (to the user's
+  actual email) got a 403 until retargeted at the account-owner address.
+  This is now documented in `/docs/features/email.md` since it'll matter
+  again whenever 7h gets built and tested. (Item 7d was scoped and built
+  later this same session — see the entry below.)
+- Tests: `packages/utils/src/truck-list-filters.test.ts` (+4,
+  `filterTrucksByFavorite`), `apps/web/lib/trucks.test.ts` (+1, asserts the
+  new `EXISTS` clause and that `viewerId` is interpolated into it), new
+  `apps/web/lib/email.test.ts` (2, mocks the `resend` package the same way
+  `storage.test.ts` mocks `@aws-sdk/client-s3`). Full suite (376 tests
+  across `@chomp/utils` + `apps/web`), `tsc --noEmit`, and a real `next
+  build` all verified clean — the `next build` check matters here
+  specifically because `resend` is a server-only (Node) package, same class
+  of risk as the `lib/storage.ts` bug documented in the 2026-08-03 session
+  below.
+- **Not done, no UI smoke test**: no live DB/Clerk session was available in
+  this environment to manually click through the new toggle end-to-end (the
+  plan's verification step 4). Automated tests + `next build` are the only
+  verification this session got; worth a real click-through next session.
+
+## This session (2026-08-16, favorite-activation notifications — item 7d)
+- **Scoped and built roadmap item 7d**, the second consumer of the Resend
+  plumbing wired up earlier this same session. Full scoping discussion
+  (recipients, opt-in default, re-trigger rule, delivery mechanism) is in
+  `/docs/features/favorite-notifications.md`; not repeated here.
+- **Decisions locked in with the user**: direct truck-favoriters only (not
+  menu-item favoriters); **opt-in only, off by default**, toggled on
+  `/account` — push notifications are explicitly deferred to a future
+  native-app phase, so this round is email-only; fires only on a real
+  off→on activation transition (re-posting while already active, whether
+  the same spot or a new one, never re-notifies — `extendLocation` was
+  already a separate "still here" code path, untouched here); delivered
+  async via a new Inngest event (`app/truck.activated`), not synchronously
+  in the request path.
+- **`postLocation` (`apps/web/lib/locations.ts`)** now checks, inside the
+  same `$transaction` as the write (not before it — atomic with the write
+  it's gating, same rigor `extendLocation`'s WHERE clause already applies),
+  whether an active current location existed. On a true activation, fires
+  `app/truck.activated` after the transaction commits. Return type
+  unchanged (`Promise<void>`) — the Inngest send happens entirely inside
+  `lib/locations.ts`, so the server action layer stays unaware of Inngest.
+- **New Inngest function** `notifyFavoritesOnActivationFunction`
+  (`apps/web/inngest/functions.ts`), same handler/function split as
+  `eraseUserHandler`/`eraseUserFunction` for direct unit testability.
+  Resolves recipients fresh from the DB at send time (not carried on the
+  event), sends one email per recipient via `Promise.allSettled` (not
+  `Promise.all` — one bounce shouldn't fail the whole run and trigger a
+  full re-send to everyone), individually rather than cc/bcc so favoriters
+  never see each other's addresses. Registered in
+  `apps/web/app/api/inngest/route.ts` alongside the existing two functions.
+- **New `apps/web/lib/favorite-notifications.ts`** — `getTruckNameAndSlug`,
+  `getOptedInFavoriterEmails` (only truck favorites with
+  `user.notifyFavoriteActive: true`), `activationEmailHtml`. Also extracted
+  `appUrl()` out of `app/actions/invites.ts` (was a private local helper)
+  into a new shared `apps/web/lib/site-url.ts`, since this feature needed
+  the same absolute-URL-building logic invites already had.
+- **New migration** `20260816225240_add_notify_favorite_active` —
+  `users.notify_favorite_active BOOLEAN NOT NULL DEFAULT false`, no
+  backfill. **Presented to the user and explicitly approved before
+  running**, per this project's standing rule; applied cleanly to the Neon
+  dev DB, `prisma migrate status` confirms no drift.
+- **Account page**: new `updateNotificationPreferenceAction`
+  (`apps/web/app/actions/account.ts`, no target-userId parameter — same
+  IDOR-free pattern as `deleteOwnAccountAction`) and a new
+  `NotificationPreferences` component, wired into `/account` between
+  "Your favorites" and "Your reviews."
+- Tests: `apps/web/lib/locations.test.ts` (+5, the activation-transition
+  branch, including a check that the "was active" read happens against the
+  transaction client so it can't race the write), new
+  `apps/web/lib/favorite-notifications.test.ts` (6), `apps/web/inngest/
+  functions.test.ts` (+5, the new handler/function pair), `apps/web/app/
+  actions/account.test.ts` (+3, the new action). Full web suite (391
+  tests), `tsc --noEmit`, and a real `next build` all verified clean both
+  before and after the migration was applied — the pre-migration build
+  correctly surfaced `The column users.notify_favorite_active does not
+  exist`, confirming the code and the (not-yet-applied) schema change were
+  consistent with each other before the DB was touched.
+- **Not done, no UI smoke test**: same gap as the favorites-filter session
+  above — no live DB/Clerk session available in this environment to click
+  through the opt-in toggle or trigger a real activation email end-to-end.
+  Worth a real click-through next session, including confirming the email
+  actually arrives (same Resend shared-test-domain constraint documented in
+  `/docs/features/email.md` applies here too).
+- Of the original 7c/d/e/f/g/h smaller-gaps list, d and g are now done;
+  c (content reporting), e (search by name/city/zip), f ("open now,"
+  blocked on a missing per-truck timezone), and h (operator verification
+  emails) remain unscoped. 7a (`TruckEvent`) from the broader gap-analysis
+  is still the single biggest named, unbuilt gap.
 
 ## This session (2026-08-13, gap-analysis + get directions)
 - **Re-ran the product gap-analysis** that originally produced location

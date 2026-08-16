@@ -22,6 +22,8 @@
 | [Account Page](./features/account.md) | Phase 1 done | Profile details (embedded Clerk `UserProfile`) + a read-only reviews list, including orphaned ones; favorites deferred |
 | [Account Erasure](./features/account-erasure.md) | Done | Hard-deletes the `User` row via an Inngest job; anonymizes (not deletes) reviews/photos; sole-truck-owner conflicts blocked and routed to a generic admin moderation queue |
 | [Navigation](./features/navigation.md) | Done | Site-wide responsive nav (desktop row / mobile drawer), role-filtered links, smart back-nav on the truck page, operator dashboard breadcrumbs |
+| [Email (Resend)](./features/email.md) | Plumbing only | `sendEmail()` foundation — first consumer is favorite-activation notifications; roadmap item 7h still unbuilt |
+| [Favorite Activation Notifications](./features/favorite-notifications.md) | Done | Opt-in email (via `/account`) to a truck's favoriters when it goes "Active now" |
 
 ---
 

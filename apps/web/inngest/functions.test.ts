@@ -8,6 +8,10 @@ const deactivateTrucks = vi.fn()
 const eraseUserRow = vi.fn()
 const findSoleOwnedTrucks = vi.fn()
 const findUserByClerkId = vi.fn()
+const sendEmail = vi.fn()
+const getTruckNameAndSlug = vi.fn()
+const getOptedInFavoriterEmails = vi.fn()
+const activationEmailHtml = vi.fn((truck: { name: string }) => `<p>${truck.name}</p>`)
 
 vi.mock('@/lib/feed', () => ({ refreshFeedView }))
 vi.mock('@/lib/moderation-queue', () => ({ openErasureBlockedEntry }))
@@ -18,10 +22,22 @@ vi.mock('@/lib/user-erasure', () => ({
   findSoleOwnedTrucks,
   findUserByClerkId,
 }))
+vi.mock('@/lib/email', () => ({ sendEmail }))
+vi.mock('@/lib/favorite-notifications', () => ({
+  getTruckNameAndSlug,
+  getOptedInFavoriterEmails,
+  activationEmailHtml,
+}))
 vi.mock('./client', () => ({ inngest: { createFunction } }))
 
-const { refreshFeedHandler, refreshFeedFunction, eraseUserHandler, eraseUserFunction } =
-  await import('./functions')
+const {
+  refreshFeedHandler,
+  refreshFeedFunction,
+  eraseUserHandler,
+  eraseUserFunction,
+  notifyFavoritesOnActivationHandler,
+  notifyFavoritesOnActivationFunction,
+} = await import('./functions')
 
 async function run<T>(id: string, fn: () => Promise<T>): Promise<T> {
   return fn()
@@ -132,5 +148,77 @@ describe('eraseUserFunction', () => {
       config: { id: 'erase-user', name: 'Erase a deleted Clerk user', triggers: [{ event: 'app/user.deleted' }] },
       handler: eraseUserHandler,
     })
+  })
+})
+
+describe('notifyFavoritesOnActivationHandler', () => {
+  beforeEach(() => {
+    sendEmail.mockReset().mockResolvedValue(undefined)
+    getTruckNameAndSlug.mockReset()
+    getOptedInFavoriterEmails.mockReset()
+  })
+
+  it('no-ops when the truck no longer exists', async () => {
+    getTruckNameAndSlug.mockResolvedValue(null)
+
+    await notifyFavoritesOnActivationHandler({ step: { run }, event: { data: { truckId: 't1' } } })
+
+    expect(getOptedInFavoriterEmails).not.toHaveBeenCalled()
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('no-ops when nobody has opted in', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getOptedInFavoriterEmails.mockResolvedValue([])
+
+    await notifyFavoritesOnActivationHandler({ step: { run }, event: { data: { truckId: 't1' } } })
+
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('sends one email per opted-in favoriter', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getOptedInFavoriterEmails.mockResolvedValue(['a@example.com', 'b@example.com'])
+
+    await notifyFavoritesOnActivationHandler({ step: { run }, event: { data: { truckId: 't1' } } })
+
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+    expect(sendEmail).toHaveBeenCalledWith({
+      to: 'a@example.com',
+      subject: 'Taco Kings is active now',
+      html: expect.stringContaining('Taco Kings'),
+    })
+    expect(sendEmail).toHaveBeenCalledWith({
+      to: 'b@example.com',
+      subject: 'Taco Kings is active now',
+      html: expect.stringContaining('Taco Kings'),
+    })
+  })
+
+  it('does not let one recipient failing stop the others from sending', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getOptedInFavoriterEmails.mockResolvedValue(['a@example.com', 'b@example.com'])
+    sendEmail.mockImplementation(async ({ to }: { to: string }) => {
+      if (to === 'a@example.com') throw new Error('bounced')
+    })
+
+    await expect(
+      notifyFavoritesOnActivationHandler({ step: { run }, event: { data: { truckId: 't1' } } }),
+    ).resolves.toBeUndefined()
+
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('notifyFavoritesOnActivationFunction', () => {
+  it('registers with the expected id and an event trigger', () => {
+    expect(createFunction).toHaveBeenCalledWith(
+      {
+        id: 'notify-favorites-on-activation',
+        name: 'Notify favoriters when a truck goes active',
+        triggers: [{ event: 'app/truck.activated' }],
+      },
+      notifyFavoritesOnActivationHandler,
+    )
   })
 })

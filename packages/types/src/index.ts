@@ -40,6 +40,14 @@ export type TruckMapMarker = {
   distanceMeters: number
   /** Always false for an anonymous (signed-out) request. */
   isFavorited: boolean
+  /**
+   * True if the viewer has favorited any of this truck's menu items, even
+   * if the truck itself isn't favorited. Kept separate from `isFavorited`
+   * (rather than folded into it) because `isFavorited` also drives the
+   * truck-level favorite toggle button — merging them would make
+   * "unfavorite" a no-op whenever only a menu item was favorited.
+   */
+  hasFavoritedMenuItem: boolean
   /** Null means no (visible) reviews yet — distinct from a real 0, which can't happen (rating is 1-5). */
   averageRating: number | null
   reviewCount: number

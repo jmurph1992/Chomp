@@ -57,6 +57,22 @@ export function filterTrucksByMinRating<T extends Rated>(trucks: T[], minRating:
   return trucks.filter((truck) => truck.averageRating !== null && truck.averageRating >= minRating)
 }
 
+type Favoritable = { isFavorited: boolean; hasFavoritedMenuItem: boolean }
+
+/**
+ * onlyFavorites = false is a no-op passthrough. When true, matches a truck
+ * that's either favorited directly or has any favorited menu item — an OR,
+ * not a data-model cascade, so favoriting one menu item never mutates
+ * truck-level favorite state.
+ */
+export function filterTrucksByFavorite<T extends Favoritable>(
+  trucks: T[],
+  onlyFavorites: boolean,
+): T[] {
+  if (!onlyFavorites) return trucks
+  return trucks.filter((truck) => truck.isFavorited || truck.hasFavoritedMenuItem)
+}
+
 /** Flattened, deduped, alphabetically sorted — drawn from whatever's actually in the passed-in array. */
 export function getDistinctCuisines<T extends CuisineTagged>(trucks: T[]): string[] {
   const all = new Set<string>()

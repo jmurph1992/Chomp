@@ -127,25 +127,44 @@ schema against what's actually wired up, not just brainstorming.
 - **c. Customer-facing content reporting — not yet scoped.** Moderation
   today is entirely admin-initiated (`/admin/reviews`); there's no "report
   this review/photo" action a customer can trigger. Trust-and-safety gap.
-- **d. Favorites × location freshness aren't connected — not yet scoped.**
-  A customer can favorite a truck but has no way to know it just went
-  "Active now" nearby — no notification infra exists to hang this off of
-  yet (same underlying gap as (g) below, but this specific pairing is newly
-  relevant now that both favorites and freshness exist).
+- **d. Favorites × location freshness — done 2026-08-16.** Opt-in only
+  (off by default, toggled on `/account`), direct truck-favoriters only,
+  fires only on a real off→on activation transition (not on a same-window
+  re-post or `extendLocation`), delivered async via a new Inngest event
+  (`app/truck.activated`) fanned out by `notifyFavoritesOnActivationFunction`.
+  See `/docs/features/favorite-notifications.md`. New migration
+  `20260816225240_add_notify_favorite_active` (`users.notify_favorite_active`,
+  default false, no backfill) applied to the Neon dev DB.
 - **e. No search by truck name/city/zip** — already flagged in
   `/docs/features/map.md` and `/docs/features/navigation.md`'s scope cuts;
   re-surfaced here as still open, not a new finding.
 - **f. No real "open now" indicator** — already flagged in
   `/docs/features/truck-detail.md`'s scope cuts, blocked on the schema
   having no per-truck timezone; re-surfaced as still open.
-- **g. No "show only my favorites" filter on the map/list** — already
-  flagged in `/docs/features/account.md`'s scope cuts; re-surfaced as still
-  open. Would extend the same filter mechanism item 0b just built
-  (`@chomp/utils/truck-list-filters.ts`).
-- **h. No operator notification on verification decisions** — already
-  flagged in `/docs/features/truck-verification.md`'s "Deliberately
-  deferred" section (no Resend integration yet to hang it off of);
-  re-surfaced as still open.
+- **g. "Show only my favorites" filter — done 2026-08-16.** Extended the
+  filter mechanism item 0b built (`@chomp/utils/truck-list-filters.ts`),
+  signed-in only. Matches a truck favorited directly OR one with any
+  favorited menu item (an OR read, not a write-side cascade — that
+  alternative was considered and rejected, see `/docs/features/map.md#my-favorites-filter`).
+  `getNearbyTrucks` gained `hasFavoritedMenuItem`, kept deliberately
+  separate from `isFavorited` to avoid breaking the truck-level favorite
+  toggle button.
+- **h. No operator notification on verification decisions** — still not
+  scoped, but its blocker is gone: Resend plumbing (`apps/web/lib/email.ts`)
+  was wired up 2026-08-16 as a shared prerequisite for this and item d, see
+  `/docs/features/email.md`. Plumbing only — no product email built yet.
+
+## Resend plumbing — done 2026-08-16 (prerequisite for 7d and 7h)
+`apps/web/lib/email.ts`'s `sendEmail()`, modeled on `lib/storage.ts`'s
+client-wrapper pattern. Sends from Resend's shared test domain
+(`onboarding@resend.dev`) for now — no DNS/domain verification done yet,
+swap to a real Chomp domain when either consumer actually ships. See
+`/docs/features/email.md`, including its security note that whoever builds
+7d/7h must source the recipient from Clerk, never client input. Manually
+verified end-to-end with a real "Sending access only" API key — found along
+the way that the shared test domain can only deliver to the Resend
+account's own registered address until a domain is verified, see
+`/docs/features/email.md` for what that means for testing 7d/7h.
 
 ## Known doc drift
 - `/go-live-requirements/operator-dashboard.md` still says image upload is

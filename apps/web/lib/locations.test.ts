@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const updateMany = vi.fn()
 const executeRaw = vi.fn()
+const txFindFirst = vi.fn()
 const findFirst = vi.fn()
 const dbUpdateMany = vi.fn()
-const tx = { truckLocation: { updateMany }, $executeRaw: executeRaw }
+const inngestSend = vi.fn()
+const tx = { truckLocation: { updateMany, findFirst: txFindFirst }, $executeRaw: executeRaw }
 const transaction = vi.fn((callback: (txArg: typeof tx) => unknown) => callback(tx))
 
 vi.mock('@chomp/db', () => ({
@@ -14,6 +16,8 @@ vi.mock('@chomp/db', () => ({
   },
 }))
 
+vi.mock('@/inngest/client', () => ({ inngest: { send: inngestSend } }))
+
 const { postLocation, getCurrentLocation, extendLocation } = await import('./locations')
 
 const oneHourFromNow = () => new Date(Date.now() + 60 * 60 * 1000).toISOString()
@@ -22,7 +26,9 @@ describe('postLocation', () => {
   beforeEach(() => {
     updateMany.mockReset()
     executeRaw.mockReset()
+    txFindFirst.mockReset()
     transaction.mockClear()
+    inngestSend.mockReset()
   })
 
   it('rejects invalid coordinates without starting a transaction', async () => {
@@ -40,6 +46,7 @@ describe('postLocation', () => {
   })
 
   it('retires the previous current location before inserting the new one', async () => {
+    txFindFirst.mockResolvedValue(null)
     updateMany.mockResolvedValue({ count: 1 })
     executeRaw.mockResolvedValue(undefined)
 
@@ -55,6 +62,46 @@ describe('postLocation', () => {
       data: { isCurrent: false },
     })
     expect(executeRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it('fires app/truck.activated when no active location existed before this post', async () => {
+    txFindFirst.mockResolvedValue(null) // no active location found inside the transaction
+    updateMany.mockResolvedValue({ count: 0 })
+    executeRaw.mockResolvedValue(undefined)
+
+    await postLocation('t1', { lat: 30.27, lng: -97.74, address: null, expiresAt: oneHourFromNow() })
+
+    expect(inngestSend).toHaveBeenCalledWith({ name: 'app/truck.activated', data: { truckId: 't1' } })
+  })
+
+  it('does not fire app/truck.activated when the truck was already active', async () => {
+    txFindFirst.mockResolvedValue({ id: 'existing-location' })
+    updateMany.mockResolvedValue({ count: 1 })
+    executeRaw.mockResolvedValue(undefined)
+
+    await postLocation('t1', { lat: 30.27, lng: -97.74, address: null, expiresAt: oneHourFromNow() })
+
+    expect(inngestSend).not.toHaveBeenCalled()
+  })
+
+  it('checks for an active location using the same freshness rule as extendLocation, inside the transaction', async () => {
+    txFindFirst.mockResolvedValue(null)
+    updateMany.mockResolvedValue({ count: 0 })
+    executeRaw.mockResolvedValue(undefined)
+
+    await postLocation('t1', { lat: 30.27, lng: -97.74, address: null, expiresAt: oneHourFromNow() })
+
+    expect(txFindFirst).toHaveBeenCalledWith({
+      where: {
+        truckId: 't1',
+        isCurrent: true,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
+      },
+      select: { id: true },
+    })
+    // Must run against the transaction client, not the top-level db client,
+    // so it can't race the write it's gating.
+    expect(findFirst).not.toHaveBeenCalled()
   })
 })
 

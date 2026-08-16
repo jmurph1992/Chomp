@@ -6,6 +6,7 @@ import { getFavoriteMenuItemsForUser, getFavoriteTrucksForUser } from '@/lib/fav
 import { findSoleOwnedTrucks } from '@/lib/user-erasure'
 import { MyReviews } from '@/components/account/my-reviews'
 import { MyFavorites } from '@/components/account/my-favorites'
+import { NotificationPreferences } from '@/components/account/notification-preferences'
 import { DeleteAccountSection } from '@/components/account/delete-account-section'
 
 /**
@@ -40,6 +41,8 @@ export default async function AccountPage() {
           <MyFavorites trucks={favoriteTrucks} menuItems={favoriteMenuItems} />
         </div>
       </section>
+
+      <NotificationPreferences initialNotifyFavoriteActive={user.notifyFavoriteActive} />
 
       <section className="mt-8">
         <h2 className="text-xl font-bold">Your reviews</h2>

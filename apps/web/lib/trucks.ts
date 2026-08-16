@@ -33,6 +33,7 @@ type NearbyTruckRow = {
   lng: number
   distanceMeters: number
   isFavorited: boolean
+  hasFavoritedMenuItem: boolean
   averageRating: number | null
   reviewCount: number
 }
@@ -69,6 +70,12 @@ export async function getNearbyTrucks(
       ST_X(tl.geom::geometry) AS "lng",
       ST_Distance(tl.geom, ST_MakePoint(${lng}, ${lat})::geography) AS "distanceMeters",
       (tf.user_id IS NOT NULL) AS "isFavorited",
+      EXISTS (
+        SELECT 1 FROM menu_items mi
+        JOIN menu_item_favorites mif ON mif.menu_item_id = mi.id
+          AND mif.user_id = ${viewerId ?? null}
+        WHERE mi.truck_id = t.id
+      ) AS "hasFavoritedMenuItem",
       r.avg_rating AS "averageRating",
       COALESCE(r.review_count, 0)::int AS "reviewCount"
     FROM trucks t

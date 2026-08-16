@@ -100,6 +100,31 @@ instead, the same reasoning already applied to the map popup's favorite
 button, just via `useState` since this is real React rather than raw DOM
 (`ListFavoriteButton` in `truck-list.tsx`).
 
+## "My favorites" filter
+
+A third filter alongside cuisine/rating (see `future-plans/roadmap.md` item
+7g), signed-in only — the toggle in `TruckListControls` doesn't render at
+all for a signed-out viewer, rather than showing disabled.
+
+Matches a truck if the viewer favorited the truck directly **or** favorited
+any of its menu items — an OR read at query time, not a write-side cascade.
+An earlier "favoriting a menu item also favorites the truck" idea was
+considered and rejected: it would make an "unfavorite the truck" click a
+no-op whenever the truck was only ever favorited via one of its items (no
+`TruckFavorite` row to delete), and it would dilute `/account`'s
+explicit-favorites list with trucks the user never actually bookmarked.
+
+`getNearbyTrucks` gained a second boolean, `hasFavoritedMenuItem`, kept
+deliberately separate from `isFavorited` on `TruckMapMarker` — merging them
+would break the truck-level favorite toggle button in exactly the way
+above. It's computed via an `EXISTS` subquery against `menu_items` +
+`menu_item_favorites`, not a `JOIN` — a `JOIN` would fan out one row per
+menu item per truck and corrupt the query's one-truck-per-row cardinality
+(`distanceMeters`, `averageRating`, and the `LIMIT 100` are all written
+assuming one row per truck). `filterTrucksByFavorite`
+(`@chomp/utils/truck-list-filters.ts`) is the pure OR of the two booleans,
+same style as the other list filters.
+
 ## Scope cuts (not built this pass)
 
 - No live polling — matches "locations update every ~30 min," data refreshes on
@@ -117,8 +142,10 @@ button, just via `useState` since this is real React rather than raw DOM
 
 - Unit: `apps/web/lib/geo.test.ts` (coordinate/radius validation),
   `apps/web/lib/trucks.test.ts#getNearbyTrucks` (with Prisma mocked, including
-  the freshness condition and the rating aggregate join),
-  `packages/utils/src/truck-list-filters.test.ts` (sort/filter logic, pure).
+  the freshness condition, the rating aggregate join, and the
+  `hasFavoritedMenuItem` `EXISTS` subquery),
+  `packages/utils/src/truck-list-filters.test.ts` (sort/filter logic,
+  including `filterTrucksByFavorite`, pure).
 - E2e (`apps/web/e2e/map.spec.ts`), gated on `DATABASE_URL` +
   `NEXT_PUBLIC_MAPBOX_TOKEN` + seeded data: geolocation-granted marker
   rendering — this is also the regression check for the `TruckDiscovery`
