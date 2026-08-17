@@ -11,9 +11,15 @@ import {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+/**
+ * The stored value is a literal wall-clock reading (see ScheduleForm's
+ * onSubmit below), never a real instant — timeZone: 'UTC' means "read back
+ * exactly what was typed," regardless of the server/browser's own local
+ * timezone.
+ */
 function formatTime(iso: string | null): string {
   if (!iso) return '—'
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })
 }
 
 export function TruckScheduleEditor({

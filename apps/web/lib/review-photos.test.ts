@@ -12,6 +12,7 @@ const likeFindMany = vi.fn()
 const ingestUploadedImage = vi.fn()
 const deleteCloudflareImage = vi.fn()
 const extractCloudflareImageId = vi.fn()
+const contentReportUpdateMany = vi.fn()
 
 // likePhoto uses the callback form of $transaction (not the array form) —
 // this lets the mock genuinely invoke tx.photoLike.create/tx.reviewPhoto.update
@@ -32,6 +33,7 @@ vi.mock('@chomp/db', () => ({
       update: photoUpdate,
     },
     photoLike: { deleteMany: likeDeleteMany, create: likeCreate, findMany: likeFindMany },
+    contentReport: { updateMany: contentReportUpdateMany },
     $transaction: transaction,
   },
 }))
@@ -43,6 +45,7 @@ const {
   likePhoto,
   unlikePhoto,
   removeAllPhotoLikesForUser,
+  setReviewPhotoVisibility,
   isValidCaption,
   MAX_CAPTION_LENGTH,
 } = await import('./review-photos')
@@ -61,6 +64,7 @@ beforeEach(() => {
   ingestUploadedImage.mockReset()
   deleteCloudflareImage.mockReset()
   extractCloudflareImageId.mockReset()
+  contentReportUpdateMany.mockReset()
 })
 
 describe('isValidCaption', () => {
@@ -238,5 +242,47 @@ describe('removeAllPhotoLikesForUser', () => {
     await removeAllPhotoLikesForUser('u1')
 
     expect(photoUpdate).not.toHaveBeenCalled()
+  })
+})
+
+describe('setReviewPhotoVisibility', () => {
+  it('rejects an empty reason without touching the database', async () => {
+    await expect(setReviewPhotoVisibility('p1', false, '  ', 'admin1')).rejects.toThrow(
+      'A moderation reason is required',
+    )
+    expect(photoUpdate).not.toHaveBeenCalled()
+  })
+
+  it('updates isVisible, moderationNote, moderatedByUserId, and moderatedAt', async () => {
+    await setReviewPhotoVisibility('p1', false, 'Inappropriate', 'admin1')
+
+    expect(photoUpdate).toHaveBeenCalledWith({
+      where: { id: 'p1' },
+      data: {
+        isVisible: false,
+        moderationNote: 'Inappropriate',
+        moderatedByUserId: 'admin1',
+        moderatedAt: expect.any(Date),
+      },
+    })
+  })
+
+  it('closes every open ContentReport on this photo when hiding', async () => {
+    await setReviewPhotoVisibility('p1', false, 'Inappropriate', 'admin1')
+
+    expect(contentReportUpdateMany).toHaveBeenCalledWith({
+      where: { reviewPhotoId: 'p1', status: 'open' },
+      data: {
+        status: 'resolved',
+        resolvedByUserId: 'admin1',
+        resolvedAt: expect.any(Date),
+        resolutionNote: 'Inappropriate',
+      },
+    })
+  })
+
+  it('does not touch ContentReport when unhiding', async () => {
+    await setReviewPhotoVisibility('p1', true, 'False positive', 'admin1')
+    expect(contentReportUpdateMany).not.toHaveBeenCalled()
   })
 })

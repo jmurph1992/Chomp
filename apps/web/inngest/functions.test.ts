@@ -12,6 +12,15 @@ const sendEmail = vi.fn()
 const getTruckNameAndSlug = vi.fn()
 const getOptedInFavoriterEmails = vi.fn()
 const activationEmailHtml = vi.fn((truck: { name: string }) => `<p>${truck.name}</p>`)
+const getEventNotifyOptedInEmails = vi.fn()
+const newEventEmailHtml = vi.fn(
+  (truck: { name: string }, event: { title: string }) => `<p>${truck.name}: ${event.title}</p>`,
+)
+const getEventTitle = vi.fn()
+const getOperatorEmails = vi.fn()
+const verificationDecisionEmailHtml = vi.fn(
+  (_truckId: string, truck: { name: string }, decision: string) => `<p>${truck.name}: ${decision}</p>`,
+)
 
 vi.mock('@/lib/feed', () => ({ refreshFeedView }))
 vi.mock('@/lib/moderation-queue', () => ({ openErasureBlockedEntry }))
@@ -23,11 +32,15 @@ vi.mock('@/lib/user-erasure', () => ({
   findUserByClerkId,
 }))
 vi.mock('@/lib/email', () => ({ sendEmail }))
+vi.mock('@/lib/events', () => ({ getEventTitle }))
 vi.mock('@/lib/favorite-notifications', () => ({
   getTruckNameAndSlug,
   getOptedInFavoriterEmails,
   activationEmailHtml,
+  getEventNotifyOptedInEmails,
+  newEventEmailHtml,
 }))
+vi.mock('@/lib/verification-notifications', () => ({ getOperatorEmails, verificationDecisionEmailHtml }))
 vi.mock('./client', () => ({ inngest: { createFunction } }))
 
 const {
@@ -37,6 +50,10 @@ const {
   eraseUserFunction,
   notifyFavoritesOnActivationHandler,
   notifyFavoritesOnActivationFunction,
+  notifyFavoritesOnNewEventHandler,
+  notifyFavoritesOnNewEventFunction,
+  notifyOperatorsOnVerificationDecisionHandler,
+  notifyOperatorsOnVerificationDecisionFunction,
 } = await import('./functions')
 
 async function run<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -219,6 +236,162 @@ describe('notifyFavoritesOnActivationFunction', () => {
         triggers: [{ event: 'app/truck.activated' }],
       },
       notifyFavoritesOnActivationHandler,
+    )
+  })
+})
+
+describe('notifyFavoritesOnNewEventHandler', () => {
+  beforeEach(() => {
+    sendEmail.mockReset().mockResolvedValue(undefined)
+    getTruckNameAndSlug.mockReset()
+    getEventTitle.mockReset()
+    getEventNotifyOptedInEmails.mockReset()
+  })
+
+  const eventPayload = { step: { run }, event: { data: { truckId: 't1', eventId: 'e1' } } }
+
+  it('no-ops when the truck no longer exists', async () => {
+    getTruckNameAndSlug.mockResolvedValue(null)
+
+    await notifyFavoritesOnNewEventHandler(eventPayload)
+
+    expect(getEventTitle).not.toHaveBeenCalled()
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('no-ops when the event no longer exists', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getEventTitle.mockResolvedValue(null)
+
+    await notifyFavoritesOnNewEventHandler(eventPayload)
+
+    expect(getEventNotifyOptedInEmails).not.toHaveBeenCalled()
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('no-ops when nobody has opted in', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getEventTitle.mockResolvedValue({ title: 'Pop-Up' })
+    getEventNotifyOptedInEmails.mockResolvedValue([])
+
+    await notifyFavoritesOnNewEventHandler(eventPayload)
+
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('sends one email per opted-in favoriter', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getEventTitle.mockResolvedValue({ title: 'Pop-Up' })
+    getEventNotifyOptedInEmails.mockResolvedValue(['a@example.com', 'b@example.com'])
+
+    await notifyFavoritesOnNewEventHandler(eventPayload)
+
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+    expect(sendEmail).toHaveBeenCalledWith({
+      to: 'a@example.com',
+      subject: 'Taco Kings posted a new event: Pop-Up',
+      html: expect.stringContaining('Pop-Up'),
+    })
+  })
+
+  it('does not let one recipient failing stop the others from sending', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getEventTitle.mockResolvedValue({ title: 'Pop-Up' })
+    getEventNotifyOptedInEmails.mockResolvedValue(['a@example.com', 'b@example.com'])
+    sendEmail.mockImplementation(async ({ to }: { to: string }) => {
+      if (to === 'a@example.com') throw new Error('bounced')
+    })
+
+    await expect(notifyFavoritesOnNewEventHandler(eventPayload)).resolves.toBeUndefined()
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('notifyFavoritesOnNewEventFunction', () => {
+  it('registers with the expected id and an event trigger', () => {
+    expect(createFunction).toHaveBeenCalledWith(
+      {
+        id: 'notify-favorites-on-new-event',
+        name: 'Notify favoriters when a truck posts a new event',
+        triggers: [{ event: 'app/truck.event-created' }],
+      },
+      notifyFavoritesOnNewEventHandler,
+    )
+  })
+})
+
+describe('notifyOperatorsOnVerificationDecisionHandler', () => {
+  beforeEach(() => {
+    sendEmail.mockReset().mockResolvedValue(undefined)
+    getTruckNameAndSlug.mockReset()
+    getOperatorEmails.mockReset()
+    verificationDecisionEmailHtml.mockClear()
+  })
+
+  const eventPayload = {
+    step: { run },
+    event: { data: { truckId: 't1', decision: 'rejected' as const, note: 'Fake business' } },
+  }
+
+  it('no-ops when the truck no longer exists', async () => {
+    getTruckNameAndSlug.mockResolvedValue(null)
+
+    await notifyOperatorsOnVerificationDecisionHandler(eventPayload)
+
+    expect(getOperatorEmails).not.toHaveBeenCalled()
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('no-ops when the truck has no operators', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getOperatorEmails.mockResolvedValue([])
+
+    await notifyOperatorsOnVerificationDecisionHandler(eventPayload)
+
+    expect(sendEmail).not.toHaveBeenCalled()
+  })
+
+  it('sends one email per operator, passing the truckId/decision/note through', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getOperatorEmails.mockResolvedValue(['owner@example.com', 'manager@example.com'])
+
+    await notifyOperatorsOnVerificationDecisionHandler(eventPayload)
+
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+    expect(sendEmail).toHaveBeenCalledWith({
+      to: 'owner@example.com',
+      subject: 'Taco Kings — verification update',
+      html: expect.stringContaining('Taco Kings'),
+    })
+    expect(verificationDecisionEmailHtml).toHaveBeenCalledWith(
+      't1',
+      { name: 'Taco Kings', slug: 'taco-kings' },
+      'rejected',
+      'Fake business',
+    )
+  })
+
+  it('does not let one recipient failing stop the others from sending', async () => {
+    getTruckNameAndSlug.mockResolvedValue({ name: 'Taco Kings', slug: 'taco-kings' })
+    getOperatorEmails.mockResolvedValue(['owner@example.com', 'manager@example.com'])
+    sendEmail.mockImplementation(async ({ to }: { to: string }) => {
+      if (to === 'owner@example.com') throw new Error('bounced')
+    })
+
+    await expect(notifyOperatorsOnVerificationDecisionHandler(eventPayload)).resolves.toBeUndefined()
+    expect(sendEmail).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('notifyOperatorsOnVerificationDecisionFunction', () => {
+  it('registers with the expected id and an event trigger', () => {
+    expect(createFunction).toHaveBeenCalledWith(
+      {
+        id: 'notify-operators-on-verification-decision',
+        name: "Notify operators when a truck's verification status changes",
+        triggers: [{ event: 'app/truck.verification-decided' }],
+      },
+      notifyOperatorsOnVerificationDecisionHandler,
     )
   })
 })

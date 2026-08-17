@@ -110,6 +110,21 @@ A server-side cap (`MAX_LOCATION_DURATION_HOURS = 48` in
 initial post and Extend, regardless of what the UI's preset list offers —
 the real trust boundary against "post once, stay active for a week."
 
+### Timezone (powers "Open now")
+
+`TruckProfileForm` (the same form that edits name/description/cuisine)
+gains a `timezone` field — an IANA identifier (e.g. `America/Chicago`),
+picked from a plain `<select>` populated via `Intl.supportedValuesOf('timeZone')`
+(built-in, no new dependency). Manually set, never auto-derived from a
+posted location — see `/docs/features/truck-detail.md`'s "Open now"
+section for why (works immediately at truck creation, not only after a
+location has ever been posted), and for the read side
+(`@chomp/utils/open-now.ts`). `null` (unset) is valid and is the default
+for every truck until an operator picks one — nothing regresses for a
+truck that never sets it, same reasoning "Active now" vs. "Open now" are
+kept as two entirely independent concepts (see above): this field only
+feeds the schedule-based indicator, never location freshness.
+
 ## Truck switcher
 
 `/dashboard` lists every truck the signed-in user operates (owner or

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import type { TruckMapMarker } from '@chomp/types'
+import type { TruckMapMarker, TruckSearchResult } from '@chomp/types'
 import {
   filterTrucksByCuisine,
   filterTrucksByFavorite,
@@ -10,10 +10,11 @@ import {
   sortTrucks,
   type TruckSortBy,
 } from '@chomp/utils'
-import { getNearbyTrucksAction } from '@/app/actions/trucks'
+import { getNearbyTrucksAction, searchLocationAction, searchTrucksByNameAction } from '@/app/actions/trucks'
 import { TruckMap } from '@/components/truck-map'
 import { TruckList } from '@/components/truck-list'
 import { TruckListControls } from '@/components/truck-list-controls'
+import { TruckSearchResults } from '@/components/truck-search-results'
 
 type Props = {
   initialTrucks: TruckMapMarker[]
@@ -35,6 +36,7 @@ export function TruckDiscovery({ initialTrucks, defaultCenter, viewerSignedIn }:
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([])
   const [minRating, setMinRating] = useState<number | null>(null)
   const [onlyFavorites, setOnlyFavorites] = useState(false)
+  const [nameSearchResults, setNameSearchResults] = useState<TruckSearchResult[] | null>(null)
 
   useEffect(() => {
     if (!navigator.geolocation) return
@@ -51,6 +53,23 @@ export function TruckDiscovery({ initialTrucks, defaultCenter, viewerSignedIn }:
       { timeout: 8000 },
     )
   }, [])
+
+  async function handleSearchByName(query: string) {
+    setNameSearchResults(await searchTrucksByNameAction(query))
+  }
+
+  // Runs the exact same two steps the geolocation success callback above
+  // does — re-centering "here" via a typed city/zip is just a second way to
+  // produce the same { lat, lng } input, not a separate code path.
+  async function handleSearchByLocation(query: string): Promise<boolean> {
+    const coords = await searchLocationAction(query)
+    if (!coords) return false
+
+    setCenter(coords)
+    const nearby = await getNearbyTrucksAction(coords.lat, coords.lng)
+    setTrucks(nearby)
+    return true
+  }
 
   // Cuisine options come from the full (unfiltered) set so the dropdown
   // doesn't shrink as other filters narrow the visible trucks.
@@ -96,10 +115,19 @@ export function TruckDiscovery({ initialTrucks, defaultCenter, viewerSignedIn }:
           viewerSignedIn={viewerSignedIn}
           onlyFavorites={onlyFavorites}
           onOnlyFavoritesChange={setOnlyFavorites}
+          onSearchByName={handleSearchByName}
+          onSearchByLocation={handleSearchByLocation}
         />
       </div>
 
-      {view === 'map' ? (
+      {nameSearchResults !== null ? (
+        <div>
+          <button type="button" onClick={() => setNameSearchResults(null)} className="mb-3 text-sm underline">
+            ← Back to nearby trucks
+          </button>
+          <TruckSearchResults trucks={nameSearchResults} />
+        </div>
+      ) : view === 'map' ? (
         <TruckMap
           trucks={visibleTrucks}
           defaultCenter={defaultCenter}

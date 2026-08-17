@@ -7,16 +7,20 @@ import type {
   TruckMapMarker,
   TruckProfileEdit,
   TruckProfileInput,
+  TruckSearchResult,
 } from '@chomp/types'
 import { clampRadiusMeters, isValidLat, isValidLng } from './geo'
+import { getUpcomingEventsForTruck } from './events'
 import { deleteCloudflareImage, extractCloudflareImageId } from './storage'
-import { isValidCuisineType, isValidTruckDescription, isValidTruckName } from './truck-validation'
+import { isValidCuisineType, isValidTimezone, isValidTruckDescription, isValidTruckName } from './truck-validation'
+import { inngest } from '@/inngest/client'
 
 export {
   MAX_CUISINE_TYPES,
   MAX_TRUCK_DESCRIPTION_LENGTH,
   MAX_TRUCK_NAME_LENGTH,
   isValidCuisineType,
+  isValidTimezone,
   isValidTruckDescription,
   isValidTruckName,
 } from './truck-validation'
@@ -98,6 +102,42 @@ export async function getNearbyTrucks(
   return rows
 }
 
+export const MAX_SEARCH_RESULTS = 20
+
+/**
+ * An unbounded (not distance-limited) search by truck name — unlike
+ * getNearbyTrucks, a match doesn't need a current location at all. Same
+ * visibility gate every other public read enforces (isActive/verified
+ * only). An empty/whitespace query returns [] without querying.
+ */
+export async function searchTrucksByName(query: string): Promise<TruckSearchResult[]> {
+  const trimmed = query.trim()
+  if (!trimmed) return []
+
+  const rows = await db.truck.findMany({
+    where: { isActive: true, verificationStatus: 'verified', name: { contains: trimmed, mode: 'insensitive' } },
+    orderBy: { name: 'asc' },
+    take: MAX_SEARCH_RESULTS,
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      cuisineType: true,
+      logoUrl: true,
+      locations: { where: { isCurrent: true }, take: 1, select: { address: true } },
+    },
+  })
+
+  return rows.map((truck) => ({
+    id: truck.id,
+    slug: truck.slug,
+    name: truck.name,
+    cuisineType: truck.cuisineType,
+    logoUrl: truck.logoUrl,
+    currentAddress: truck.locations[0]?.address ?? null,
+  }))
+}
+
 /**
  * viewerId is optional — same `viewerId ?? ''` pattern getVisibleReviewsForTruck
  * already uses for photo likes: passing '' rather than making the favorites
@@ -134,13 +174,16 @@ export async function getTruckBySlug(
   // SQL) — only current-location coordinates are needed here (the Get
   // Directions link's fallback when no address is on file), so this is a
   // second small query rather than folding coordinates into every truck fetch.
-  const coords = currentLocation
-    ? await db.$queryRaw<{ lat: number; lng: number }[]>`
-        SELECT ST_Y(geom::geometry) AS "lat", ST_X(geom::geometry) AS "lng"
-        FROM truck_locations
-        WHERE truck_id = ${truck.id} AND is_current = true
-      `
-    : []
+  const [coords, upcomingEvents] = await Promise.all([
+    currentLocation
+      ? db.$queryRaw<{ lat: number; lng: number }[]>`
+          SELECT ST_Y(geom::geometry) AS "lat", ST_X(geom::geometry) AS "lng"
+          FROM truck_locations
+          WHERE truck_id = ${truck.id} AND is_current = true
+        `
+      : Promise.resolve([]),
+    getUpcomingEventsForTruck(truck.id),
+  ])
 
   return {
     id: truck.id,
@@ -159,6 +202,8 @@ export async function getTruckBySlug(
     locationLat: coords[0]?.lat ?? null,
     locationLng: coords[0]?.lng ?? null,
     isFavorited: truck.favorites.length > 0,
+    notifyNewEvents: truck.favorites[0]?.notifyNewEvents ?? false,
+    timezone: truck.timezone,
     schedule: truck.schedules.map((s) => ({
       id: s.id,
       dayOfWeek: s.dayOfWeek,
@@ -184,6 +229,7 @@ export async function getTruckBySlug(
         isFavorited: item.favorites.length > 0,
       })),
     })),
+    upcomingEvents,
   }
 }
 
@@ -252,6 +298,7 @@ export async function getTruckForEdit(truckId: string): Promise<TruckProfileEdit
     logoUrl: truck.logoUrl,
     coverUrl: truck.coverUrl,
     isActive: truck.isActive,
+    timezone: truck.timezone,
     verificationStatus: truck.verificationStatus,
     verificationNote: truck.verificationNote,
   }
@@ -266,6 +313,7 @@ export async function updateTruckProfile(truckId: string, input: TruckProfileInp
   if (!isValidTruckName(input.name)) throw new Error('Invalid truck name')
   if (!isValidTruckDescription(input.description)) throw new Error('Description too long')
   if (!isValidCuisineType(input.cuisineType)) throw new Error('Invalid cuisine type list')
+  if (!isValidTimezone(input.timezone)) throw new Error('Invalid timezone')
 
   await db.truck.update({
     where: { id: truckId },
@@ -279,6 +327,7 @@ export async function updateTruckProfile(truckId: string, input: TruckProfileInp
       logoUrl: input.logoUrl,
       coverUrl: input.coverUrl,
       isActive: input.isActive,
+      timezone: input.timezone,
     },
   })
 }
@@ -311,12 +360,19 @@ export async function getAllTrucksForAdmin(): Promise<AdminTruckView[]> {
   }))
 }
 
-/** Approves a truck (from any prior status) — clears any rejection/hold note. */
+/**
+ * Approves a truck (from any prior status) — clears any rejection/hold note.
+ * Fires app/truck.verification-decided after the write (fire-and-forget,
+ * same as postLocation/createEvent — nothing prior to read atomically with
+ * this write) so every operator on the truck gets notified; see
+ * lib/verification-notifications.ts.
+ */
 export async function verifyTruck(truckId: string): Promise<void> {
   await db.truck.update({
     where: { id: truckId },
     data: { verificationStatus: 'verified', verificationNote: null },
   })
+  await inngest.send({ name: 'app/truck.verification-decided', data: { truckId, decision: 'verified', note: null } })
 }
 
 /** Declines a truck pre-launch. Requires a reason so the operator/admin trail is clear. */
@@ -326,6 +382,10 @@ export async function rejectTruck(truckId: string, reason: string): Promise<void
   await db.truck.update({
     where: { id: truckId },
     data: { verificationStatus: 'rejected', verificationNote: reason },
+  })
+  await inngest.send({
+    name: 'app/truck.verification-decided',
+    data: { truckId, decision: 'rejected', note: reason },
   })
 }
 
@@ -343,6 +403,7 @@ export async function holdTruck(truckId: string, reason: string): Promise<void> 
     where: { id: truckId },
     data: { verificationStatus: 'onHold', verificationNote: reason },
   })
+  await inngest.send({ name: 'app/truck.verification-decided', data: { truckId, decision: 'onHold', note: reason } })
 }
 
 /**

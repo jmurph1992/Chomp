@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const limit = vi.fn()
+const headersGet = vi.fn()
 
 vi.mock('@upstash/redis', () => ({
   Redis: { fromEnv: vi.fn(() => ({})) },
@@ -15,7 +16,9 @@ vi.mock('@upstash/ratelimit', () => {
   return { Ratelimit }
 })
 
-const { checkRateLimit, reviewLimiter } = await import('./rate-limit')
+vi.mock('next/headers', () => ({ headers: async () => ({ get: headersGet }) }))
+
+const { checkRateLimit, getClientIp, reviewLimiter } = await import('./rate-limit')
 
 describe('checkRateLimit', () => {
   beforeEach(() => limit.mockReset())
@@ -34,5 +37,19 @@ describe('checkRateLimit', () => {
     limit.mockResolvedValue({ success: true })
     await checkRateLimit(reviewLimiter, 'u42')
     expect(limit).toHaveBeenCalledWith('u42')
+  })
+})
+
+describe('getClientIp', () => {
+  beforeEach(() => headersGet.mockReset())
+
+  it('returns the first address from x-forwarded-for', async () => {
+    headersGet.mockReturnValue('1.2.3.4, 5.6.7.8')
+    expect(await getClientIp()).toBe('1.2.3.4')
+  })
+
+  it('falls back to "unknown" when the header is absent', async () => {
+    headersGet.mockReturnValue(null)
+    expect(await getClientIp()).toBe('unknown')
   })
 })

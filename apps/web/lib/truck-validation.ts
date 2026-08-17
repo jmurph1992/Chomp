@@ -31,3 +31,14 @@ export function isValidCuisineType(cuisineType: string[]): boolean {
     cuisineType.every((c) => typeof c === 'string' && c.length > 0 && c.length <= MAX_CUISINE_TYPE_LENGTH)
   )
 }
+
+/** null means "not set" (valid — the Open/Closed indicator just doesn't render). Otherwise must be a real IANA identifier. */
+export function isValidTimezone(timezone: string | null): boolean {
+  if (timezone === null) return true
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone })
+    return true
+  } catch {
+    return false
+  }
+}

@@ -97,12 +97,15 @@ model User {
   reviewPhotos                     ReviewPhoto[]
   photoLikes                       PhotoLike[]
   moderatedReviews                 Review[]               @relation("ReviewModerator")
+  moderatedReviewPhotos            ReviewPhoto[]          @relation("ReviewPhotoModerator")
   sentInvites                      TruckInvite[]          @relation("InviteCreatedBy")
   acceptedInvites                  TruckInvite[]          @relation("InviteAcceptedBy")
   truckFavorites                   TruckFavorite[]
   menuItemFavorites                MenuItemFavorite[]
   moderationQueueEntriesAsSubject  ModerationQueueEntry[] @relation("ModerationQueueSubject")
   moderationQueueEntriesAsResolver ModerationQueueEntry[] @relation("ModerationQueueResolvedBy")
+  contentReportsFiled              ContentReport[]        @relation("ContentReportReporter")
+  contentReportsResolved           ContentReport[]        @relation("ContentReportResolvedBy")
 
   @@map("users")
 }
@@ -123,6 +126,11 @@ model Truck {
   instagram          String?
   logoUrl            String?            @map("logo_url")
   coverUrl           String?            @map("cover_url")
+  /// IANA identifier (e.g. "America/Chicago"), set manually by the operator on
+  /// the profile form — not auto-derived from a posted location. Null until set;
+  /// the "Open now" indicator (lib/schedule.ts, @chomp/utils/open-now.ts) simply
+  /// doesn't render for a truck without one, same as before this field existed.
+  timezone           String?
   verificationStatus VerificationStatus @default(pending) @map("verification_status") // set by admin
   verificationNote   String?            @map("verification_note") // rejection/hold reason, cleared on verify
   isActive           Boolean            @default(true) @map("is_active")
@@ -299,6 +307,7 @@ model Review {
   // TruckInvite.acceptedByUser above, made explicit rather than changed.
   moderator User?         @relation("ReviewModerator", fields: [moderatedByUserId], references: [id], onDelete: SetNull)
   photos    ReviewPhoto[]
+  reports   ContentReport[]
 
   @@unique([truckId, userId])
   @@map("reviews")
@@ -317,11 +326,19 @@ model ReviewPhoto {
   isVisible  Boolean  @default(true) @map("is_visible")
   likesCount Int      @default(0) @map("likes_count")
   createdAt  DateTime @default(now()) @map("created_at")
+  /// Moderation audit trail — parity with Review's own moderationNote/
+  /// moderatedByUserId/moderatedAt, added alongside content reporting since
+  /// photos previously had no admin moderation capability at all.
+  moderationNote    String?   @map("moderation_note")
+  moderatedByUserId String?   @map("moderated_by_user_id")
+  moderatedAt       DateTime? @map("moderated_at")
 
-  review Review      @relation(fields: [reviewId], references: [id])
-  user   User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
-  truck  Truck?      @relation(fields: [truckId], references: [id], onDelete: SetNull)
-  likes  PhotoLike[]
+  review    Review          @relation(fields: [reviewId], references: [id])
+  user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  truck     Truck?          @relation(fields: [truckId], references: [id], onDelete: SetNull)
+  moderator User?           @relation("ReviewPhotoModerator", fields: [moderatedByUserId], references: [id], onDelete: SetNull)
+  likes     PhotoLike[]
+  reports   ContentReport[]
 
   @@map("review_photos")
 }
@@ -360,6 +377,11 @@ model TruckFavorite {
   truckId   String   @map("truck_id")
   userId    String   @map("user_id")
   createdAt DateTime @default(now()) @map("created_at")
+  /// Opt-in, off by default (see the same reasoning as User.notifyFavoriteActive).
+  /// Toggled on the truck's own detail page, not /account — only meaningful once
+  /// this favorite row exists, unlike notifyFavoriteActive which is a User-level
+  /// preference covering every favorited truck at once.
+  notifyNewEvents Boolean @default(false) @map("notify_new_events")
 
   truck Truck @relation(fields: [truckId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -461,4 +483,61 @@ model ErasureRecord {
   moderationQueueEntry ModerationQueueEntry? @relation(fields: [moderationQueueEntryId], references: [id])
 
   @@map("erasure_records")
+}
+
+// ─── Content reporting ──────────────────────────────────────────────────────
+
+enum ContentReportReason {
+  spam
+  inappropriate
+  harassment
+  other
+}
+
+/// open: needs an admin to triage. resolved: the reported content was hidden
+/// (via this report or another open report on the same item, auto-closed
+/// together). dismissed: an admin decided this specific report wasn't
+/// actionable — the content is untouched, and other open reports on the same
+/// item are NOT auto-dismissed, since a dismissal is a judgment on this one
+/// report, not proof the content itself is fine.
+enum ContentReportStatus {
+  open
+  resolved
+  dismissed
+}
+
+/// Customer-initiated report against a review or a review photo — exactly
+/// one of reviewId/reviewPhotoId is set (an app-level invariant, not a DB
+/// CHECK, same looseness as TruckSchedule's dayOfWeek/specificDate).
+/// Deliberately NOT built on ModerationQueueEntry despite that table's
+/// "generic" framing — its resolve/dismiss functions hard-code Clerk
+/// account deletion/unban logic specific to the erasure-blocked use case,
+/// which would be actively dangerous to trigger from a content report.
+/// Resolving a report hides the underlying content via the same
+/// setReviewVisibility/setReviewPhotoVisibility primitive the existing
+/// per-item admin hide button uses — this table tracks only the report's
+/// own disposition, not a second copy of the hide/unhide audit trail
+/// already on Review/ReviewPhoto.
+model ContentReport {
+  id               String              @id @default(uuid())
+  reviewId         String?             @map("review_id")
+  reviewPhotoId    String?             @map("review_photo_id")
+  reporterUserId   String?             @map("reporter_user_id")
+  reason           ContentReportReason
+  note             String?
+  status           ContentReportStatus @default(open)
+  createdAt        DateTime            @default(now()) @map("created_at")
+  resolvedAt       DateTime?           @map("resolved_at")
+  resolvedByUserId String?             @map("resolved_by_user_id")
+  resolutionNote   String?             @map("resolution_note")
+
+  review         Review?      @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewPhoto    ReviewPhoto? @relation(fields: [reviewPhotoId], references: [id], onDelete: Cascade)
+  // Nullable + SetNull, same pattern as Review.userId — a report outlives an
+  // erased reporter (the report itself is evidence, not the reporter's PII).
+  reporter       User?        @relation("ContentReportReporter", fields: [reporterUserId], references: [id], onDelete: SetNull)
+  resolvedByUser User?        @relation("ContentReportResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("content_reports")
 }

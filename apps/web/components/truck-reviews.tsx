@@ -12,7 +12,9 @@ import {
   likePhotoAction,
   unlikePhotoAction,
 } from '@/app/actions/review-photos'
+import { reportReviewAction, reportReviewPhotoAction } from '@/app/actions/reports'
 import { MAX_REVIEW_BODY_LENGTH, isValidReviewBody } from '@/lib/review-validation'
+import { ReportButton } from './report-button'
 import { uploadToR2 } from './use-image-upload'
 
 type Props = {
@@ -46,29 +48,40 @@ export function TruckReviews({ truckId, slug, reviews, summary, ownReview }: Pro
       </SignedIn>
 
       <ul className="mt-6 space-y-4">
-        {reviews.map((review) => (
-          <li key={review.id} className="border-t pt-4">
-            <div className="flex items-baseline gap-2">
-              <span className="font-medium">{review.userDisplayName ?? 'Anonymous'}</span>
-              <span className="text-gray-500">{review.rating} ★</span>
-            </div>
-            {review.body && <p className="mt-1 text-sm">{review.body}</p>}
-            {review.photo && (
-              <div className="mt-2">
-                <Image
-                  src={review.photo.url}
-                  alt={review.photo.caption ?? ''}
-                  width={200}
-                  height={200}
-                  unoptimized
-                  className="h-40 w-40 rounded object-cover"
-                />
-                {review.photo.caption && <p className="mt-1 text-xs text-gray-500">{review.photo.caption}</p>}
-                <PhotoLikeButton truckId={truckId} slug={slug} photo={review.photo} />
+        {reviews.map((review) => {
+          const isOwnReview = review.id === ownReview?.id
+          return (
+            <li key={review.id} className="border-t pt-4">
+              <div className="flex items-baseline gap-2">
+                <span className="font-medium">{review.userDisplayName ?? 'Anonymous'}</span>
+                <span className="text-gray-500">{review.rating} ★</span>
               </div>
-            )}
-          </li>
-        ))}
+              {review.body && <p className="mt-1 text-sm">{review.body}</p>}
+              {review.photo && (
+                <div className="mt-2">
+                  <Image
+                    src={review.photo.url}
+                    alt={review.photo.caption ?? ''}
+                    width={200}
+                    height={200}
+                    unoptimized
+                    className="h-40 w-40 rounded object-cover"
+                  />
+                  {review.photo.caption && <p className="mt-1 text-xs text-gray-500">{review.photo.caption}</p>}
+                  <PhotoLikeButton truckId={truckId} slug={slug} photo={review.photo} />
+                  <ReportButton
+                    isOwnContent={isOwnReview}
+                    onSubmit={(reason, note) => reportReviewPhotoAction(review.photo!.id, { reason, note })}
+                  />
+                </div>
+              )}
+              <ReportButton
+                isOwnContent={isOwnReview}
+                onSubmit={(reason, note) => reportReviewAction(review.id, { reason, note })}
+              />
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

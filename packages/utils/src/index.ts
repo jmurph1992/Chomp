@@ -9,6 +9,7 @@ export * from './dashboard-tabs'
 export * from './location-freshness'
 export * from './truck-list-filters'
 export * from './directions'
+export * from './open-now'
 
 // ─── Slugs ────────────────────────────────────────────────────────────────────
 

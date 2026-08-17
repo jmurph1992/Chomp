@@ -3,6 +3,8 @@ import { inngest } from '@/inngest/client'
 import {
   eraseUserFunction,
   notifyFavoritesOnActivationFunction,
+  notifyFavoritesOnNewEventFunction,
+  notifyOperatorsOnVerificationDecisionFunction,
   refreshFeedFunction,
 } from '@/inngest/functions'
 
@@ -14,5 +16,11 @@ import {
  */
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [refreshFeedFunction, eraseUserFunction, notifyFavoritesOnActivationFunction],
+  functions: [
+    refreshFeedFunction,
+    eraseUserFunction,
+    notifyFavoritesOnActivationFunction,
+    notifyFavoritesOnNewEventFunction,
+    notifyOperatorsOnVerificationDecisionFunction,
+  ],
 })

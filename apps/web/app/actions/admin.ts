@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from '@/lib/admin'
+import { dismissContentReport, resolveContentReport } from '@/lib/reports'
 import { setReviewVisibility } from '@/lib/reviews'
 import { holdTruck, rejectTruck, verifyTruck } from '@/lib/trucks'
 
@@ -44,4 +45,22 @@ export async function unhideReviewAction(reviewId: string, slug: string, reason:
   await setReviewVisibility(reviewId, true, reason, admin.id)
   revalidatePath('/admin/reviews')
   revalidatePath(`/trucks/${slug}`)
+}
+
+// slug isn't known ahead of time here (the report could target either a
+// review or a photo, on any truck) — resolveContentReportAction/
+// dismissContentReportAction revalidate broadly rather than threading a
+// truck slug through, same tradeoff verifyTruckAction's revalidatePath('/')
+// already makes.
+export async function resolveContentReportAction(reportId: string, resolutionNote: string): Promise<void> {
+  const admin = await requireAdmin()
+  await resolveContentReport(reportId, admin.id, resolutionNote)
+  revalidatePath('/admin/reports')
+  revalidatePath('/admin/reviews')
+}
+
+export async function dismissContentReportAction(reportId: string, resolutionNote: string): Promise<void> {
+  const admin = await requireAdmin()
+  await dismissContentReport(reportId, admin.id, resolutionNote)
+  revalidatePath('/admin/reports')
 }

@@ -115,3 +115,42 @@ export async function removeAllPhotoLikesForUser(userId: string): Promise<void> 
     await db.reviewPhoto.update({ where: { id: photoId }, data: { likesCount: { decrement: 1 } } })
   }
 }
+
+// ─── Moderation ─────────────────────────────────────────────────────────────
+
+/**
+ * The moderation primitive for photos — direct mirror of
+ * lib/reviews.ts#setReviewVisibility. A reason is always required. No
+ * permission check inside it; the caller (a server action) is responsible
+ * for calling requireAdmin() first.
+ *
+ * Hiding also closes out every open ContentReport on this photo (including
+ * whichever one an admin is acting through, if any) — see
+ * lib/reports.ts#resolveContentReport, which relies on this rather than
+ * separately updating the report row itself.
+ */
+export async function setReviewPhotoVisibility(
+  photoId: string,
+  isVisible: boolean,
+  reason: string,
+  moderatorUserId: string,
+): Promise<void> {
+  if (!reason.trim()) throw new Error('A moderation reason is required')
+
+  await db.reviewPhoto.update({
+    where: { id: photoId },
+    data: {
+      isVisible,
+      moderationNote: reason,
+      moderatedByUserId: moderatorUserId,
+      moderatedAt: new Date(),
+    },
+  })
+
+  if (!isVisible) {
+    await db.contentReport.updateMany({
+      where: { reviewPhotoId: photoId, status: 'open' },
+      data: { status: 'resolved', resolvedByUserId: moderatorUserId, resolvedAt: new Date(), resolutionNote: reason },
+    })
+  }
+}

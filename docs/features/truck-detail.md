@@ -43,10 +43,21 @@ detail page only this pass** — the list view and map popups don't have this
 link yet, deliberately deferred (the map's popups are raw DOM, a separate
 implementation from this page's plain React `<a>`), not an oversight.
 
-**Scope cut**: no computed "open now" boolean — the schema has no per-truck
-timezone, so schedule times are shown as plain text
-(`apps/web/lib/schedule.ts#getTodaysScheduleEntries`) instead of a
-open/closed state that would need to know what "now" means for that truck.
+**"Open now"** (roadmap item 7f, built 2026-08-17): a green "Open now —
+until {time}" / muted "Closed" badge (`components/open-now-status.tsx`),
+computed server-side via `@chomp/utils/open-now.ts#getOpenNowStatus` from
+`truck.schedule` and the new manual `Truck.timezone` field (an IANA
+identifier, set on the operator's profile form — never auto-derived from a
+posted location). Deliberately independent of "Active now"
+(`/docs/features/operator-dashboard.md#location-updates`) — this is about
+whether the truck is inside its posted weekly hours, not whether the
+operator has a live, unexpired location report; the codebase's own naming
+already reserves "Open now" for exactly this, distinct from "Active now."
+No badge renders at all for a truck with no timezone set — falls back to
+exactly the plain-text schedule display below, no regression. **Scope
+cut**: same-day windows only — an entry crossing midnight (e.g. 10pm-2am)
+isn't specially handled, and the `closed` state has no "opens at X"
+prediction (would need a forward scan across days).
 
 ## Menu
 
@@ -95,6 +106,10 @@ page's first pass — all three now exist as their own features.
 - Unit: `apps/web/lib/trucks.test.ts#getTruckBySlug` (mapping, price
   conversion, the `isAvailable`/`displayOrder` query shape, 404 on missing
   truck), `apps/web/lib/schedule.test.ts`, `apps/web/lib/menu.test.ts`.
+  `packages/utils/src/open-now.test.ts` covers the "Open now" logic itself,
+  including proving real timezone-awareness (the same instant/schedule
+  producing different results in two different zones), boundary
+  inclusivity, and cancelled-entry exclusion.
 - E2e (`apps/web/e2e/truck-detail.spec.ts`), gated on `DATABASE_URL` + seeded
   data: page render, 404 for unknown slug, menu items render (excluding the
   seeded unavailable item), and filter-chip narrowing.

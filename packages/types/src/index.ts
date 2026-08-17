@@ -53,6 +53,22 @@ export type TruckMapMarker = {
   reviewCount: number
 }
 
+/**
+ * A name-searched truck (see lib/trucks.ts#searchTrucksByName) — deliberately
+ * lighter than TruckMapMarker, since a matched truck may have no current
+ * location at all (no lat/lng/distanceMeters to offer, unlike the
+ * geolocation-bounded "nearby" results).
+ */
+export type TruckSearchResult = {
+  id: string
+  slug: string
+  name: string
+  cuisineType: string[]
+  logoUrl: string | null
+  /** From the current TruckLocation row, if any — display context only, not a link target. */
+  currentAddress: string | null
+}
+
 /** A single schedule entry as shown on a truck's detail page. */
 export type TruckScheduleEntry = {
   id: string
@@ -121,6 +137,12 @@ export type TruckDetail = {
   menu: MenuCategoryView[]
   /** False for an anonymous visitor — see getTruckBySlug's optional viewerId param. */
   isFavorited: boolean
+  /** Always false when isFavorited is false — there's no TruckFavorite row to read the preference from. */
+  notifyNewEvents: boolean
+  /** Events with no end date, or an end date that hasn't passed yet — see lib/events.ts#getUpcomingEventsForTruck. */
+  upcomingEvents: TruckEventView[]
+  /** IANA identifier, manually set by the operator. Null means the "Open now" indicator doesn't render — see @chomp/utils/open-now.ts. */
+  timezone: string | null
 }
 
 // ─── Operator dashboard ─────────────────────────────────────────────────────
@@ -191,6 +213,8 @@ export type TruckProfileInput = {
   logoUrl: string | null
   coverUrl: string | null
   isActive: boolean
+  /** IANA identifier (e.g. "America/Chicago"), manually set — null means the "Open now" indicator won't render. */
+  timezone: string | null
 }
 
 /**
@@ -261,6 +285,31 @@ export type PostLocationInput = {
   expiresAt: string
 }
 
+// ─── Events ─────────────────────────────────────────────────────────────────
+
+/** Input for creating/updating a truck event. */
+export type TruckEventInput = {
+  title: string
+  description: string | null
+  /** ISO instant, both optional independently — a title-only announcement is valid. */
+  startsAt: string | null
+  endsAt: string | null
+  address: string | null
+}
+
+/** A truck event as read back — for both the dashboard editor and the public "Upcoming Events" section. */
+export type TruckEventView = {
+  id: string
+  title: string
+  description: string | null
+  startsAt: string | null
+  endsAt: string | null
+  address: string | null
+  /** Null unless `address` was successfully geocoded — see lib/geocoding.ts. */
+  lat: number | null
+  lng: number | null
+}
+
 // ─── Photo upload ─────────────────────────────────────────────────────────────
 
 /** Presigned R2 POST — client uploads the file directly to `url` with `fields`. */
@@ -326,6 +375,38 @@ export type AdminReviewView = {
   createdAt: string
 }
 
+// ─── Content reporting ──────────────────────────────────────────────────────
+
+export type ContentReportReasonValue = 'spam' | 'inappropriate' | 'harassment' | 'other'
+export type ContentReportStatusValue = 'open' | 'resolved' | 'dismissed'
+
+/** Input for reporting a review or a review photo. */
+export type ContentReportInput = {
+  reason: ContentReportReasonValue
+  note: string | null
+}
+
+/**
+ * A report against a review or a review photo, for the admin queue.
+ * Exactly one of review/photo is set. reporterEmail is nullable — an erased
+ * reporter's report survives, same pattern as AdminReviewView.userEmail.
+ */
+export type ContentReportView = {
+  id: string
+  reason: ContentReportReasonValue
+  note: string | null
+  status: ContentReportStatusValue
+  reporterEmail: string | null
+  truckSlug: string
+  truckName: string
+  review: { id: string; body: string | null; rating: number } | null
+  reviewPhoto: { id: string; url: string; caption: string | null } | null
+  createdAt: string
+  resolvedAt: string | null
+  resolvedByEmail: string | null
+  resolutionNote: string | null
+}
+
 /**
  * A review as shown on the signed-in user's own account page, across all
  * trucks. Unlike ReviewView, truckId/truckSlug/truckName are all nullable —
@@ -386,6 +467,22 @@ export type FeedItem = {
   truckSlug: string
   truckName: string
   authorDisplayName: string | null
+}
+
+/**
+ * An upcoming event for the feed's live "Upcoming Events" section — sourced
+ * directly from truck_events, not the feed_items materialized view (see
+ * lib/feed.ts#getUpcomingEventsForFeed for why: the view only refreshes
+ * daily, too stale for a time-sensitive announcement).
+ */
+export type FeedEvent = {
+  id: string
+  title: string
+  startsAt: string | null
+  endsAt: string | null
+  address: string | null
+  truckSlug: string
+  truckName: string
 }
 
 // ─── Account erasure & moderation ──────────────────────────────────────────────

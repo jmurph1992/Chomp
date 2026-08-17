@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { db } from '@chomp/db'
 import { getCurrentUser } from '@/lib/auth'
 import {
   favoriteMenuItem,
@@ -59,4 +60,30 @@ export async function unfavoriteMenuItemAction(
 
   await unfavoriteMenuItem(user.id, truckId, menuItemId)
   revalidateFavoriteSurfaces(slug)
+}
+
+/**
+ * Toggled on the truck's own detail page (not /account, unlike
+ * notifyFavoriteActive), and only meaningful once a TruckFavorite row
+ * exists — the updateMany's where clause enforces "must have favorited
+ * this truck first" server-side, not just via the UI only rendering the
+ * toggle when isFavorited. No target-user parameter, same IDOR-free
+ * pattern as updateNotificationPreferenceAction (app/actions/account.ts):
+ * this can only ever touch the caller's own favorite row.
+ */
+export async function updateEventNotifyPreferenceAction(
+  truckId: string,
+  slug: string,
+  notifyNewEvents: boolean,
+): Promise<void> {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('Sign in required')
+
+  const result = await db.truckFavorite.updateMany({
+    where: { truckId, userId: user.id },
+    data: { notifyNewEvents },
+  })
+  if (result.count === 0) throw new Error('Favorite this truck first')
+
+  revalidatePath(`/trucks/${slug}`)
 }

@@ -107,13 +107,20 @@ were never written down and couldn't be recovered, hence this re-run).
 Same methodology: cross-referencing the original product scope and existing
 schema against what's actually wired up, not just brainstorming.
 
-- **a. Special events — not yet scoped.** The original product scope named
-  "weekly schedule, menu, **events**" as an operator capability. `TruckEvent`
-  exists in full in the schema (title, description, time window, address,
-  geom) — its own schema comment says *"Planned feature — not yet wired to
-  the UI."* Zero UI, zero API, zero docs. The single closest match to how
-  location freshness itself was found (a real, named product capability
-  sitting dead in the schema).
+- **a. Special events — done 2026-08-17.** Full operator CRUD
+  (`/dashboard/[truckId]/events`), public display on the truck's own page
+  ("Upcoming Events", below the weekly schedule) and a live (not
+  materialized-view) section on `/feed`, Mapbox geocoding of the typed
+  address (reusing `NEXT_PUBLIC_MAPBOX_TOKEN`, top match auto-accepted) for
+  a "Get Directions" link, and an opt-in-per-truck notification
+  (`TruckFavorite.notifyNewEvents`, toggled on the truck's own page,
+  requires already favoriting) via a new `app/truck.event-created` Inngest
+  event. Map pins deliberately skipped, same reasoning Get Directions (7b)
+  used to skip the map's raw-DOM popups. See `/docs/features/events.md`.
+  New migration `20260817184420_add_notify_new_events`
+  (`truck_favorites.notify_new_events`, default false, no backfill) applied
+  to the Neon dev DB — `TruckEvent` itself needed no schema change, already
+  fully migrated since init.
 - **b. "Get Directions" link — done 2026-08-13.** Truck detail page only
   (list/map popup surfaces deliberately deferred — the map's raw-DOM popup
   implementation would be a separate code path, discussed and set aside);
@@ -124,9 +131,20 @@ schema against what's actually wired up, not just brainstorming.
   are `TEXT`), so `${truck.id}::uuid` broke the new query's `=` comparison
   — fixed by dropping the cast. See `/docs/features/truck-detail.md`. Built
   from `future-plans/get-directions-plan.md`.
-- **c. Customer-facing content reporting — not yet scoped.** Moderation
-  today is entirely admin-initiated (`/admin/reviews`); there's no "report
-  this review/photo" action a customer can trigger. Trust-and-safety gap.
+- **c. Customer-facing content reporting — done 2026-08-17.** A "Report"
+  action on both reviews and their attached photos (fixed reason categories
+  + optional note, one report per user per item, rate-limited), triaged
+  through a new dedicated `/admin/reports` queue — deliberately **not**
+  built on `ModerationQueueEntry` despite its "generic" framing, since that
+  table's resolve/dismiss functions hard-code Clerk account deletion/unban
+  logic specific to the erasure-blocked use case. New `ContentReport` model.
+  Also built photo moderation from scratch (`ReviewPhoto` had `isVisible`
+  but no admin hide/unhide at all before this) — `moderationNote`/
+  `moderatedByUserId`/`moderatedAt` now mirror `Review`'s existing fields.
+  Resolving a report hides the content and auto-closes every other open
+  report on the same item; the existing `/admin/reviews` hide button does
+  the same, so the two moderation entry points can't diverge. See
+  `/docs/features/content-reporting.md`.
 - **d. Favorites × location freshness — done 2026-08-16.** Opt-in only
   (off by default, toggled on `/account`), direct truck-favoriters only,
   fires only on a real off→on activation transition (not on a same-window
@@ -135,12 +153,40 @@ schema against what's actually wired up, not just brainstorming.
   See `/docs/features/favorite-notifications.md`. New migration
   `20260816225240_add_notify_favorite_active` (`users.notify_favorite_active`,
   default false, no backfill) applied to the Neon dev DB.
-- **e. No search by truck name/city/zip** — already flagged in
-  `/docs/features/map.md` and `/docs/features/navigation.md`'s scope cuts;
-  re-surfaced here as still open, not a new finding.
-- **f. No real "open now" indicator** — already flagged in
-  `/docs/features/truck-detail.md`'s scope cuts, blocked on the schema
-  having no per-truck timezone; re-surfaced as still open.
+- **e. Search by truck name/city/zip — done 2026-08-17.** Two findings
+  reshaped this: `TruckLocation.city`/`state`/`zip` are dead columns
+  (nothing ever populates them — `postLocation` only writes a free-text
+  `address`), and the discovery page had no unbounded truck lookup at all
+  (`getNearbyTrucks` is geolocation-bounded). Built as: (1) a real,
+  unbounded name search (`searchTrucksByName`, any verified truck
+  regardless of distance) whose results replace the Map/List view with a
+  lightweight results list; (2) "city/zip" reinterpreted as re-centering —
+  geocode the typed string (`lib/geocoding.ts`, built for events) and feed
+  it through the same `setCenter`/`getNearbyTrucksAction` path the
+  geolocation callback already uses, not a text match against the empty
+  columns. Both controls live in `TruckListControls`, not a global nav
+  search box (`navigation.md` still cuts that). New `locationSearchLimiter`
+  — the first IP-keyed rate limiter in the app, since this is the first
+  action anonymous visitors can call that needed one. See
+  `/docs/features/search.md`. No schema change, no migration.
+- **f. "Open now" indicator — done 2026-08-17.** A new manual `Truck.timezone`
+  field (IANA identifier, set on the profile form — not auto-derived from a
+  posted location, works immediately at truck creation) unblocked this.
+  `@chomp/utils/open-now.ts#getOpenNowStatus` (new, pure, real
+  Intl-timezone-aware) computes whether the truck-local time is inside a
+  posted, non-cancelled `TruckSchedule` window; truck detail page only, a
+  green "Open now — until {time}" / muted "Closed" badge, no badge at all
+  (falls back to the existing plain-text schedule) for a truck with no
+  timezone set. Deliberately kept independent of "Active now" — same
+  distinction the location-freshness feature's own naming already
+  establishes. Caught and fixed an adjacent pre-existing bug along the way:
+  schedule times were rendered via `toLocaleTimeString` with no `timeZone`,
+  so display depended on the *server's* local timezone rather than reading
+  back the literal wall-clock value the operator typed. Same-day windows
+  only this pass (no overnight-crossing support), no "opens at X" for the
+  closed state. See `/docs/features/truck-detail.md` and
+  `/docs/features/operator-dashboard.md#timezone-powers-open-now`. New
+  migration `20260817214106_add_truck_timezone`.
 - **g. "Show only my favorites" filter — done 2026-08-16.** Extended the
   filter mechanism item 0b built (`@chomp/utils/truck-list-filters.ts`),
   signed-in only. Matches a truck favorited directly OR one with any
@@ -149,10 +195,19 @@ schema against what's actually wired up, not just brainstorming.
   `getNearbyTrucks` gained `hasFavoritedMenuItem`, kept deliberately
   separate from `isFavorited` to avoid breaking the truck-level favorite
   toggle button.
-- **h. No operator notification on verification decisions** — still not
-  scoped, but its blocker is gone: Resend plumbing (`apps/web/lib/email.ts`)
-  was wired up 2026-08-16 as a shared prerequisite for this and item d, see
-  `/docs/features/email.md`. Plumbing only — no product email built yet.
+- **h. Operator notification on verification decisions — done
+  2026-08-17.** Every operator on the truck (owner + managers, no `role`
+  filter) gets an email whenever an admin verifies, rejects, or holds
+  their truck — always-on, no opt-in (unlike this app's other two email
+  consumers), since this is core status info, not a discretionary alert.
+  `verifyTruck`/`rejectTruck`/`holdTruck` (`lib/trucks.ts`) fire
+  `app/truck.verification-decided` every call, deliberately with no
+  dedup/transition check (each admin decision may carry a fresh reason).
+  New `lib/verification-notifications.ts` + `notifyOperatorsOnVerificationDecisionFunction`
+  (`inngest/functions.ts`), same shape as the other two Inngest email
+  consumers. See `/docs/features/truck-verification.md#operator-notification`.
+  No schema change, no migration. With this, **every item on the whole
+  `future-plans/roadmap.md` list is closed**.
 
 ## Resend plumbing — done 2026-08-16 (prerequisite for 7d and 7h)
 `apps/web/lib/email.ts`'s `sendEmail()`, modeled on `lib/storage.ts`'s

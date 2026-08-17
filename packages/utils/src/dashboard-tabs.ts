@@ -3,12 +3,16 @@
  * the breadcrumb trail so the two never drift out of sync.
  */
 
-export type DashboardTab = { slug: '' | 'menu' | 'schedule' | 'location' | 'team'; label: string }
+export type DashboardTab = {
+  slug: '' | 'menu' | 'schedule' | 'events' | 'location' | 'team'
+  label: string
+}
 
 export const DASHBOARD_TABS: DashboardTab[] = [
   { slug: '', label: 'Profile' },
   { slug: 'menu', label: 'Menu' },
   { slug: 'schedule', label: 'Schedule' },
+  { slug: 'events', label: 'Events' },
   { slug: 'location', label: 'Location' },
   { slug: 'team', label: 'Team' },
 ]

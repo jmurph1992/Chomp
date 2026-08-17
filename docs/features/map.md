@@ -125,11 +125,26 @@ assuming one row per truck). `filterTrucksByFavorite`
 (`@chomp/utils/truck-list-filters.ts`) is the pure OR of the two booleans,
 same style as the other list filters.
 
+## Search
+
+Two independent controls in `TruckListControls`, roadmap item 7e, built
+2026-08-17 — see `/docs/features/search.md` for the full write-up. Name
+search (`searchTrucksByNameAction` → `lib/trucks.ts#searchTrucksByName`) is
+a real, unbounded lookup, not a filter over the already-nearby set — it
+finds any verified truck by name regardless of distance or whether it has a
+current location at all, and its results replace the Map/List toggle
+content with a lighter `TruckSearchResults` list (no distance/rating,
+just a link to the truck's own page) until cleared. Location search
+(`searchLocationAction`) geocodes a typed city/zip/address and feeds the
+result through the exact same `setCenter` + `getNearbyTrucksAction` path
+the geolocation callback already uses — typing a city is just a second way
+to produce a `{ lat, lng }`, not a text match against `TruckLocation.city`/
+`state`/`zip`, which are dead columns nothing ever populates.
+
 ## Scope cuts (not built this pass)
 
 - No live polling — matches "locations update every ~30 min," data refreshes on
   page reload or the one geolocation-triggered fetch, not on an interval.
-- No city/zip search — only automatic geolocation or the default region.
 - No manual "use my location" button.
 - No Redis caching for the nearby-trucks query yet — there's no real traffic to
   justify it; `stack.md` still commits to Redis for location caching, revisit

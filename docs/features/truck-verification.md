@@ -85,12 +85,36 @@ unconditionally — since `getTruckBySlug` only ever returns `verified`
 trucks, every truck that reaches that page already is one. No map marker or
 feed-card treatment in this pass (kept intentionally small).
 
+## Operator notification
+
+Roadmap item 7h, built 2026-08-17. Every operator on the truck (owner and
+managers alike — no `role` filter, same "manager parity" reasoning
+`requireOperator` already applies everywhere else) gets an email whenever
+an admin verifies, rejects, or holds their truck. Always-on, no opt-in
+preference — unlike this app's other two email consumers (favorite
+activation, new events, both discretionary), this is core status
+information about the operator's own truck; an opt-out could mean an
+operator never finds out why their truck vanished from the map.
+
+`verifyTruck`/`rejectTruck`/`holdTruck` (`lib/trucks.ts`) each fire
+`app/truck.verification-decided` (fire-and-forget, same as
+`postLocation`/`createEvent`) after their write, **every time**, with no
+dedup/transition check — unlike the favorite-activation off→on-only logic,
+each call here is a deliberate, low-frequency admin decision that may
+carry a fresh reason (e.g. a re-reject with an updated note), not a
+high-frequency automatic trigger where re-notifying would be spammy.
+`notifyOperatorsOnVerificationDecisionFunction` (`inngest/functions.ts`)
+picks it up, same load-truck/load-recipients/`Promise.allSettled`-send
+shape as the other two consumers. `lib/verification-notifications.ts`
+(new) holds `getOperatorEmails` and `verificationDecisionEmailHtml` — the
+`verified` email links to the public truck page (`/trucks/{slug}`); the
+`rejected`/`onHold` emails link to the dashboard instead
+(`/dashboard/{truckId}`), since a non-verified truck's public page 404s
+(this file's own visibility-gating section above) — linking there would
+be a dead link.
+
 ## Deliberately deferred
 
-- **No operator notification** when a truck is verified/rejected/held —
-  dashboard-only for now. Resend isn't wired up yet (see
-  `/docs/architecture/stack.md`), so there's no email path to hang this off
-  of yet.
 - **No re-reject-with-updated-reason UI nuance** — an admin can re-reject a
   truck that's already `rejected`, overwriting the note, but the queue
   doesn't do anything special to highlight "this was already rejected once."
@@ -104,8 +128,16 @@ feed-card treatment in this pass (kept intentionally small).
   `getNearbyTrucks` both exclude non-verified trucks), `getTruckForEdit`
   returns the status fields, `getAllTrucksForAdmin` returns every truck with
   owner email, `verifyTruck`/`rejectTruck`/`holdTruck` set the right
-  fields and `rejectTruck`/`holdTruck` reject an empty reason without
-  writing.
+  fields, `rejectTruck`/`holdTruck` reject an empty reason without writing
+  or notifying, and each fires `app/truck.verification-decided` with the
+  right decision/note.
+- `lib/verification-notifications.test.ts` — `getOperatorEmails`'s
+  unfiltered (owner + manager) query shape, `verificationDecisionEmailHtml`'s
+  three copy/link variants.
+- `inngest/functions.test.ts` —
+  `notifyOperatorsOnVerificationDecisionHandler`: no-ops on a deleted
+  truck or zero operators, sends one email per operator, one failed send
+  doesn't stop the others.
 - `lib/admin.test.ts` — `requireAdmin` rejects signed-out and non-admin
   callers, resolves for an admin.
 - `app/actions/admin.test.ts` — each of the three actions rejects a

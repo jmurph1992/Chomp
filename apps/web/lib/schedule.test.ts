@@ -66,6 +66,32 @@ describe('getTodaysScheduleEntries', () => {
     const result = getTodaysScheduleEntries([entry({ dayOfWeek: 3, isCancelled: true })], wednesday)
     expect(result).toHaveLength(0)
   })
+
+  it('a null timezone (explicit) behaves exactly like omitting it', () => {
+    const result = getTodaysScheduleEntries([entry({ dayOfWeek: 3 })], wednesday, null)
+    expect(result).toHaveLength(1)
+  })
+
+  it('with a timezone, computes "today" in that zone rather than the raw reference date', () => {
+    // 2026-07-29T02:00:00Z is Wednesday in UTC, but still Tuesday in
+    // America/Los_Angeles (UTC-7 in July) — proves real Intl-based
+    // conversion, not a pass-through of the raw instant.
+    const crossesDateLine = new Date('2026-07-29T02:00:00.000Z')
+
+    const tuesdayEntry = getTodaysScheduleEntries(
+      [entry({ dayOfWeek: 2 })],
+      crossesDateLine,
+      'America/Los_Angeles',
+    )
+    expect(tuesdayEntry).toHaveLength(1)
+
+    const wednesdayEntry = getTodaysScheduleEntries(
+      [entry({ dayOfWeek: 3 })],
+      crossesDateLine,
+      'America/Los_Angeles',
+    )
+    expect(wednesdayEntry).toHaveLength(0)
+  })
 })
 
 const validScheduleInput: ScheduleEntryInput = {

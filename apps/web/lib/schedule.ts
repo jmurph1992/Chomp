@@ -1,18 +1,26 @@
 import { db } from '@chomp/db'
 import type { ScheduleEntryInput, TruckScheduleEntry } from '@chomp/types'
+import { getLocalDateParts } from '@chomp/utils'
 
 /**
- * Returns schedule entries relevant to `referenceDate`'s calendar day — either a
- * recurring weekly slot for that day-of-week, or a one-off slot with a matching
- * specific date. Cancelled entries are excluded. Does not attempt to compute
- * "open now" (would require a per-truck timezone, which the schema doesn't have yet).
+ * Returns schedule entries relevant to today's calendar day — either a
+ * recurring weekly slot for that day-of-week, or a one-off slot with a
+ * matching specific date. Cancelled entries are excluded.
+ *
+ * When `timezone` is given, "today" is computed in that timezone (see
+ * @chomp/utils/open-now.ts#getLocalDateParts) — the truck-local day, not
+ * the server process's own. When omitted/null, falls back to
+ * `referenceDate`'s own getDay()/toISOString() exactly as before this
+ * param existed — no behavior change for a truck with no timezone set.
  */
 export function getTodaysScheduleEntries(
   schedule: TruckScheduleEntry[],
   referenceDate: Date = new Date(),
+  timezone?: string | null,
 ): TruckScheduleEntry[] {
-  const dayOfWeek = referenceDate.getDay()
-  const isoDate = referenceDate.toISOString().slice(0, 10)
+  const local = timezone ? getLocalDateParts(referenceDate, timezone) : null
+  const dayOfWeek = local ? local.dayOfWeek : referenceDate.getDay()
+  const isoDate = local ? local.date : referenceDate.toISOString().slice(0, 10)
 
   return schedule.filter((entry) => {
     if (entry.isCancelled) return false

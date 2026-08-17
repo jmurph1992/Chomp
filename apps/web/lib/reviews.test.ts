@@ -8,9 +8,12 @@ const deleteMany = vi.fn()
 const update = vi.fn()
 const deleteReviewPhoto = vi.fn()
 
+const contentReportUpdateMany = vi.fn()
+
 vi.mock('@chomp/db', () => ({
   db: {
     review: { findMany, findUnique, aggregate, upsert, deleteMany, update },
+    contentReport: { updateMany: contentReportUpdateMany },
   },
 }))
 vi.mock('./review-photos', () => ({ deleteReviewPhoto }))
@@ -263,7 +266,10 @@ describe('deleteReview', () => {
 })
 
 describe('setReviewVisibility', () => {
-  beforeEach(() => update.mockReset())
+  beforeEach(() => {
+    update.mockReset()
+    contentReportUpdateMany.mockReset()
+  })
 
   it('rejects an empty reason without touching the database', async () => {
     await expect(setReviewVisibility('r1', false, '  ', 'admin1')).rejects.toThrow(
@@ -300,6 +306,23 @@ describe('setReviewVisibility', () => {
         moderatedAt: expect.any(Date),
       },
     })
+  })
+
+  it('closes every open ContentReport on this review when hiding', async () => {
+    update.mockResolvedValue({})
+    await setReviewVisibility('r1', false, 'Spam', 'admin1')
+
+    expect(contentReportUpdateMany).toHaveBeenCalledWith({
+      where: { reviewId: 'r1', status: 'open' },
+      data: { status: 'resolved', resolvedByUserId: 'admin1', resolvedAt: expect.any(Date), resolutionNote: 'Spam' },
+    })
+  })
+
+  it('does not touch ContentReport when unhiding', async () => {
+    update.mockResolvedValue({})
+    await setReviewVisibility('r1', true, 'False positive', 'admin1')
+
+    expect(contentReportUpdateMany).not.toHaveBeenCalled()
   })
 })
 

@@ -7,15 +7,24 @@ import { getOwnReview, getReviewSummary, getVisibleReviewsForTruck } from '@/lib
 import { TruckMenu } from '@/components/truck-menu'
 import { TruckReviews } from '@/components/truck-reviews'
 import { TruckFavoriteButton } from '@/components/truck-favorite-button'
+import { TruckEventNotifyToggle } from '@/components/truck-event-notify-toggle'
+import { TruckEvents } from '@/components/truck-events'
 import { SmartBackLink } from '@/components/nav/smart-back-link'
 import { LocationStatus } from '@/components/location-status'
-import { buildDirectionsUrl } from '@chomp/utils'
+import { OpenNowStatusBadge } from '@/components/open-now-status'
+import { buildDirectionsUrl, getOpenNowStatus } from '@chomp/utils'
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+/**
+ * The stored value is a literal wall-clock reading (e.g. "11:00" typed by
+ * the operator, stored as 1970-01-01T11:00:00.000Z), never a real instant
+ * — timeZone: 'UTC' here means "read back exactly what was typed,"
+ * regardless of the server process's own local timezone.
+ */
 function formatTime(iso: string | null): string | null {
   if (!iso) return null
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })
 }
 
 export default async function TruckDetailPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -26,7 +35,8 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
   const truck = await getTruckBySlug(slug, currentUser?.id)
   if (!truck) notFound()
 
-  const todaysSchedule = getTodaysScheduleEntries(truck.schedule)
+  const todaysSchedule = getTodaysScheduleEntries(truck.schedule, new Date(), truck.timezone)
+  const openNowStatus = getOpenNowStatus(truck.schedule, truck.timezone)
   const directionsUrl = buildDirectionsUrl(truck.currentAddress, truck.locationLat, truck.locationLng)
 
   const [reviews, reviewSummary, ownReview] = await Promise.all([
@@ -69,6 +79,12 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
         </span>
         <TruckFavoriteButton truckId={truck.id} slug={truck.slug} isFavorited={truck.isFavorited} />
       </div>
+      <TruckEventNotifyToggle
+        truckId={truck.id}
+        slug={truck.slug}
+        isFavorited={truck.isFavorited}
+        notifyNewEvents={truck.notifyNewEvents}
+      />
       {truck.cuisineType.length > 0 && (
         <p className="mt-1 text-gray-500">{truck.cuisineType.join(', ')}</p>
       )}
@@ -93,6 +109,8 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
           )}
         </div>
       )}
+
+      <OpenNowStatusBadge status={openNowStatus} />
 
       {todaysSchedule.length > 0 && (
         <section className="mt-6">
@@ -123,6 +141,8 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
           </ul>
         </section>
       )}
+
+      <TruckEvents events={truck.upcomingEvents} />
 
       <TruckMenu truckId={truck.id} slug={truck.slug} menu={truck.menu} />
 

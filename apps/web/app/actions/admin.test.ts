@@ -5,11 +5,14 @@ const verifyTruck = vi.fn()
 const rejectTruck = vi.fn()
 const holdTruck = vi.fn()
 const setReviewVisibility = vi.fn()
+const resolveContentReport = vi.fn()
+const dismissContentReport = vi.fn()
 const revalidatePath = vi.fn()
 
 vi.mock('@/lib/admin', () => ({ requireAdmin }))
 vi.mock('@/lib/trucks', () => ({ verifyTruck, rejectTruck, holdTruck }))
 vi.mock('@/lib/reviews', () => ({ setReviewVisibility }))
+vi.mock('@/lib/reports', () => ({ resolveContentReport, dismissContentReport }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 
 const {
@@ -18,6 +21,8 @@ const {
   holdTruckAction,
   hideReviewAction,
   unhideReviewAction,
+  resolveContentReportAction,
+  dismissContentReportAction,
 } = await import('./admin')
 
 beforeEach(() => {
@@ -26,6 +31,8 @@ beforeEach(() => {
   rejectTruck.mockReset()
   holdTruck.mockReset()
   setReviewVisibility.mockReset()
+  resolveContentReport.mockReset()
+  dismissContentReport.mockReset()
   revalidatePath.mockReset()
 })
 
@@ -109,5 +116,38 @@ describe('unhideReviewAction', () => {
     expect(setReviewVisibility).toHaveBeenCalledWith('r1', true, 'False positive', 'admin1')
     expect(revalidatePath).toHaveBeenCalledWith('/admin/reviews')
     expect(revalidatePath).toHaveBeenCalledWith('/trucks/taco-kings')
+  })
+})
+
+describe('resolveContentReportAction', () => {
+  it('rejects a non-admin, without writing', async () => {
+    requireAdmin.mockRejectedValue(new Error('Not authorized'))
+    await expect(resolveContentReportAction('rep1', 'Confirmed spam')).rejects.toThrow('Not authorized')
+    expect(resolveContentReport).not.toHaveBeenCalled()
+  })
+
+  it('resolves with the admin id and revalidates', async () => {
+    requireAdmin.mockResolvedValue({ id: 'admin1', role: 'admin' })
+    await resolveContentReportAction('rep1', 'Confirmed spam')
+
+    expect(resolveContentReport).toHaveBeenCalledWith('rep1', 'admin1', 'Confirmed spam')
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/reports')
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/reviews')
+  })
+})
+
+describe('dismissContentReportAction', () => {
+  it('rejects a non-admin, without writing', async () => {
+    requireAdmin.mockRejectedValue(new Error('Not authorized'))
+    await expect(dismissContentReportAction('rep1', 'Not actionable')).rejects.toThrow('Not authorized')
+    expect(dismissContentReport).not.toHaveBeenCalled()
+  })
+
+  it('dismisses with the admin id and revalidates', async () => {
+    requireAdmin.mockResolvedValue({ id: 'admin1', role: 'admin' })
+    await dismissContentReportAction('rep1', 'Not actionable')
+
+    expect(dismissContentReport).toHaveBeenCalledWith('rep1', 'admin1', 'Not actionable')
+    expect(revalidatePath).toHaveBeenCalledWith('/admin/reports')
   })
 })

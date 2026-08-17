@@ -10,6 +10,7 @@ const txTruckOperatorCreate = vi.fn()
 const txUserUpdate = vi.fn()
 const deleteCloudflareImage = vi.fn()
 const extractCloudflareImageId = vi.fn()
+const inngestSend = vi.fn()
 
 const tx = {
   truck: { create: txTruckCreate },
@@ -27,9 +28,11 @@ vi.mock('@chomp/db', () => ({
 }))
 
 vi.mock('./storage', () => ({ deleteCloudflareImage, extractCloudflareImageId }))
+vi.mock('@/inngest/client', () => ({ inngest: { send: inngestSend } }))
 
 const {
   getNearbyTrucks,
+  searchTrucksByName,
   getTruckBySlug,
   createTruck,
   getTruckForEdit,
@@ -145,6 +148,52 @@ describe('getNearbyTrucks', () => {
   })
 })
 
+describe('searchTrucksByName', () => {
+  beforeEach(() => findMany.mockReset())
+
+  it('returns [] for an empty or whitespace query without querying', async () => {
+    expect(await searchTrucksByName('   ')).toEqual([])
+    expect(findMany).not.toHaveBeenCalled()
+  })
+
+  it('filters to active, verified trucks with a case-insensitive contains match, capped at 20', async () => {
+    findMany.mockResolvedValue([])
+    await searchTrucksByName('  taco  ')
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: { isActive: true, verificationStatus: 'verified', name: { contains: 'taco', mode: 'insensitive' } },
+      orderBy: { name: 'asc' },
+      take: 20,
+      select: expect.objectContaining({ id: true, slug: true, name: true }),
+    })
+  })
+
+  it('maps the current location address when present, null when absent', async () => {
+    findMany.mockResolvedValue([
+      {
+        id: 't1',
+        slug: 'taco-kings',
+        name: 'Taco Kings',
+        cuisineType: ['mexican'],
+        logoUrl: null,
+        locations: [{ address: '123 Main St' }],
+      },
+      {
+        id: 't2',
+        slug: 'pho-real',
+        name: 'Pho Real',
+        cuisineType: [],
+        logoUrl: null,
+        locations: [],
+      },
+    ])
+
+    const result = await searchTrucksByName('t')
+    expect(result[0]).toMatchObject({ id: 't1', currentAddress: '123 Main St' })
+    expect(result[1]).toMatchObject({ id: 't2', currentAddress: null })
+  })
+})
+
 describe('getTruckBySlug', () => {
   beforeEach(() => {
     findUnique.mockReset()
@@ -218,7 +267,21 @@ describe('getTruckBySlug', () => {
       ],
     })
 
-    queryRaw.mockResolvedValue([{ lat: 30.27, lng: -97.74 }])
+    // Array order matches the two db.$queryRaw calls Promise.all issues:
+    // coordinates first, then getUpcomingEventsForTruck's own query.
+    queryRaw.mockResolvedValueOnce([{ lat: 30.27, lng: -97.74 }])
+    queryRaw.mockResolvedValueOnce([
+      {
+        id: 'e1',
+        title: 'Weekend Pop-Up',
+        description: null,
+        startsAt: null,
+        endsAt: null,
+        address: null,
+        lat: null,
+        lng: null,
+      },
+    ])
 
     const result = await getTruckBySlug('taco-kings')
 
@@ -231,6 +294,9 @@ describe('getTruckBySlug', () => {
     expect(result?.schedule.at(0)?.locationNote).toBe('Corner of 5th')
     expect(result?.menu).toHaveLength(1)
     expect(result?.menu.at(0)?.items.at(0)?.price).toBe(4.5)
+    expect(result?.upcomingEvents).toEqual([
+      expect.objectContaining({ id: 'e1', title: 'Weekend Pop-Up' }),
+    ])
   })
 
   it('returns null locationReportedAt/locationExpiresAt when there is no current location row', async () => {
@@ -257,7 +323,10 @@ describe('getTruckBySlug', () => {
     expect(result?.locationExpiresAt).toBeNull()
     expect(result?.locationLat).toBeNull()
     expect(result?.locationLng).toBeNull()
-    expect(queryRaw).not.toHaveBeenCalled()
+    // The coordinates query is skipped with no current location, but
+    // getUpcomingEventsForTruck's own raw query still runs unconditionally
+    // (events are independent of location) — see lib/events.ts.
+    expect(queryRaw).toHaveBeenCalledTimes(1)
   })
 
   it('maps isFavorited true/false for the truck and each menu item based on the favorites include', async () => {
@@ -312,6 +381,28 @@ describe('getTruckBySlug', () => {
     expect(result?.isFavorited).toBe(true)
     expect(result?.menu[0]?.items[0]?.isFavorited).toBe(true)
     expect(result?.menu[0]?.items[1]?.isFavorited).toBe(false)
+  })
+
+  it('maps notifyNewEvents from the viewer\'s own favorite row, false when not favorited', async () => {
+    findUnique.mockResolvedValue({
+      id: 't1',
+      slug: 'taco-kings',
+      name: 'Taco Kings',
+      description: null,
+      cuisineType: [],
+      phone: null,
+      website: null,
+      instagram: null,
+      logoUrl: null,
+      coverUrl: null,
+      locations: [],
+      favorites: [{ truckId: 't1', userId: 'u1', notifyNewEvents: true }],
+      schedules: [],
+      menuCategories: [],
+    })
+
+    const result = await getTruckBySlug('taco-kings', 'u1')
+    expect(result?.notifyNewEvents).toBe(true)
   })
 
   it('scopes the favorites include by viewerId, defaulting to an empty string when signed out', async () => {
@@ -512,6 +603,7 @@ describe('updateTruckProfile', () => {
     logoUrl: null,
     coverUrl: null,
     isActive: true,
+    timezone: null,
   }
 
   it('rejects an invalid name without touching the database', async () => {
@@ -521,12 +613,20 @@ describe('updateTruckProfile', () => {
     expect(truckUpdate).not.toHaveBeenCalled()
   })
 
+  it('rejects an invalid timezone without touching the database', async () => {
+    await expect(updateTruckProfile('t1', { ...validInput, timezone: 'Not/AZone' })).rejects.toThrow(
+      'Invalid timezone',
+    )
+    expect(truckUpdate).not.toHaveBeenCalled()
+  })
+
   it('updates only the writable fields — never verificationStatus, verificationNote, ownerId, or slug', async () => {
     truckUpdate.mockResolvedValue({})
-    await updateTruckProfile('t1', validInput)
+    await updateTruckProfile('t1', { ...validInput, timezone: 'America/Chicago' })
 
     const call = truckUpdate.mock.calls.at(0)?.at(0)
     expect(call.where).toEqual({ id: 't1' })
+    expect(call.data.timezone).toBe('America/Chicago')
     expect(call.data).not.toHaveProperty('verificationStatus')
     expect(call.data).not.toHaveProperty('verificationNote')
     expect(call.data).not.toHaveProperty('ownerId')
@@ -569,7 +669,10 @@ describe('getAllTrucksForAdmin', () => {
 })
 
 describe('verifyTruck', () => {
-  beforeEach(() => truckUpdate.mockReset())
+  beforeEach(() => {
+    truckUpdate.mockReset()
+    inngestSend.mockReset()
+  })
 
   it('sets verified and clears any prior note', async () => {
     truckUpdate.mockResolvedValue({})
@@ -580,14 +683,28 @@ describe('verifyTruck', () => {
       data: { verificationStatus: 'verified', verificationNote: null },
     })
   })
+
+  it('fires app/truck.verification-decided with decision verified and no note', async () => {
+    truckUpdate.mockResolvedValue({})
+    await verifyTruck('t1')
+
+    expect(inngestSend).toHaveBeenCalledWith({
+      name: 'app/truck.verification-decided',
+      data: { truckId: 't1', decision: 'verified', note: null },
+    })
+  })
 })
 
 describe('rejectTruck', () => {
-  beforeEach(() => truckUpdate.mockReset())
+  beforeEach(() => {
+    truckUpdate.mockReset()
+    inngestSend.mockReset()
+  })
 
-  it('requires a non-empty reason, without writing', async () => {
+  it('requires a non-empty reason, without writing or notifying', async () => {
     await expect(rejectTruck('t1', '   ')).rejects.toThrow('reason is required')
     expect(truckUpdate).not.toHaveBeenCalled()
+    expect(inngestSend).not.toHaveBeenCalled()
   })
 
   it('sets rejected with the given reason', async () => {
@@ -599,14 +716,28 @@ describe('rejectTruck', () => {
       data: { verificationStatus: 'rejected', verificationNote: 'Fake business' },
     })
   })
+
+  it('fires app/truck.verification-decided with decision rejected and the reason as note', async () => {
+    truckUpdate.mockResolvedValue({})
+    await rejectTruck('t1', 'Fake business')
+
+    expect(inngestSend).toHaveBeenCalledWith({
+      name: 'app/truck.verification-decided',
+      data: { truckId: 't1', decision: 'rejected', note: 'Fake business' },
+    })
+  })
 })
 
 describe('holdTruck', () => {
-  beforeEach(() => truckUpdate.mockReset())
+  beforeEach(() => {
+    truckUpdate.mockReset()
+    inngestSend.mockReset()
+  })
 
-  it('requires a non-empty reason, without writing', async () => {
+  it('requires a non-empty reason, without writing or notifying', async () => {
     await expect(holdTruck('t1', '')).rejects.toThrow('reason is required')
     expect(truckUpdate).not.toHaveBeenCalled()
+    expect(inngestSend).not.toHaveBeenCalled()
   })
 
   it('sets onHold with the given reason', async () => {
@@ -616,6 +747,16 @@ describe('holdTruck', () => {
     expect(truckUpdate).toHaveBeenCalledWith({
       where: { id: 't1' },
       data: { verificationStatus: 'onHold', verificationNote: 'Health code complaint' },
+    })
+  })
+
+  it('fires app/truck.verification-decided with decision onHold and the reason as note', async () => {
+    truckUpdate.mockResolvedValue({})
+    await holdTruck('t1', 'Health code complaint')
+
+    expect(inngestSend).toHaveBeenCalledWith({
+      name: 'app/truck.verification-decided',
+      data: { truckId: 't1', decision: 'onHold', note: 'Health code complaint' },
     })
   })
 })

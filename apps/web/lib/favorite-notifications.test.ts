@@ -10,9 +10,13 @@ vi.mock('@chomp/db', () => ({
   },
 }))
 
-const { getTruckNameAndSlug, getOptedInFavoriterEmails, activationEmailHtml } = await import(
-  './favorite-notifications'
-)
+const {
+  getTruckNameAndSlug,
+  getOptedInFavoriterEmails,
+  activationEmailHtml,
+  getEventNotifyOptedInEmails,
+  newEventEmailHtml,
+} = await import('./favorite-notifications')
 
 beforeEach(() => {
   truckFindUnique.mockReset()
@@ -72,5 +76,32 @@ describe('activationEmailHtml', () => {
     expect(html).toContain('Taco Kings')
     expect(html).toContain('http://localhost:3000/trucks/taco-kings')
     expect(html).toContain('http://localhost:3000/account')
+  })
+})
+
+describe('getEventNotifyOptedInEmails', () => {
+  it('only queries favorites with notifyNewEvents set, not the User-level flag', async () => {
+    truckFavoriteFindMany.mockResolvedValue([])
+    await getEventNotifyOptedInEmails('t1')
+
+    expect(truckFavoriteFindMany).toHaveBeenCalledWith({
+      where: { truckId: 't1', notifyNewEvents: true },
+      select: { user: { select: { email: true } } },
+    })
+  })
+
+  it('flattens the result to a plain email array', async () => {
+    truckFavoriteFindMany.mockResolvedValue([{ user: { email: 'a@example.com' } }])
+    expect(await getEventNotifyOptedInEmails('t1')).toEqual(['a@example.com'])
+  })
+})
+
+describe('newEventEmailHtml', () => {
+  it('links to the truck page and names the event', () => {
+    const html = newEventEmailHtml({ name: 'Taco Kings', slug: 'taco-kings' }, { title: 'Pop-Up' })
+
+    expect(html).toContain('Taco Kings')
+    expect(html).toContain('Pop-Up')
+    expect(html).toContain('http://localhost:3000/trucks/taco-kings')
   })
 })

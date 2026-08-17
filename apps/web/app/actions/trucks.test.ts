@@ -6,13 +6,22 @@ const createTruck = vi.fn()
 const updateTruckProfile = vi.fn()
 const deleteTruck = vi.fn()
 const getNearbyTrucks = vi.fn()
+const searchTrucksByName = vi.fn()
 const revalidatePath = vi.fn()
 const checkRateLimit = vi.fn()
+const getClientIp = vi.fn()
+const geocodeAddress = vi.fn()
 
 vi.mock('@/lib/auth', () => ({ getCurrentUser }))
 vi.mock('@/lib/operators', () => ({ requireOperator }))
-vi.mock('@/lib/rate-limit', () => ({ checkRateLimit, truckCreationLimiter: {} }))
-vi.mock('@/lib/trucks', () => ({ createTruck, updateTruckProfile, deleteTruck, getNearbyTrucks }))
+vi.mock('@/lib/rate-limit', () => ({
+  checkRateLimit,
+  getClientIp,
+  truckCreationLimiter: {},
+  locationSearchLimiter: {},
+}))
+vi.mock('@/lib/trucks', () => ({ createTruck, updateTruckProfile, deleteTruck, getNearbyTrucks, searchTrucksByName }))
+vi.mock('@/lib/geocoding', () => ({ geocodeAddress }))
 vi.mock('@/lib/geo', () => ({
   DEFAULT_RADIUS_METERS: 16093,
   isValidLat: (v: number) => v >= -90 && v <= 90,
@@ -20,8 +29,14 @@ vi.mock('@/lib/geo', () => ({
 }))
 vi.mock('next/cache', () => ({ revalidatePath }))
 
-const { createTruckAction, updateTruckProfileAction, deleteTruckAction, getNearbyTrucksAction } =
-  await import('./trucks')
+const {
+  createTruckAction,
+  updateTruckProfileAction,
+  deleteTruckAction,
+  getNearbyTrucksAction,
+  searchTrucksByNameAction,
+  searchLocationAction,
+} = await import('./trucks')
 
 describe('createTruckAction', () => {
   beforeEach(() => {
@@ -81,6 +96,7 @@ describe('updateTruckProfileAction', () => {
     logoUrl: null,
     coverUrl: null,
     isActive: true,
+    timezone: null,
   }
 
   it('rejects when the caller is not an operator of this truck, without updating', async () => {
@@ -168,5 +184,50 @@ describe('getNearbyTrucksAction', () => {
     await getNearbyTrucksAction(30.2672, -97.7431)
 
     expect(getNearbyTrucks).toHaveBeenCalledWith(30.2672, -97.7431, 16093, undefined)
+  })
+})
+
+describe('searchTrucksByNameAction', () => {
+  beforeEach(() => searchTrucksByName.mockReset())
+
+  it('delegates directly, no auth required', async () => {
+    searchTrucksByName.mockResolvedValue([{ id: 't1' }])
+    const result = await searchTrucksByNameAction('taco')
+
+    expect(searchTrucksByName).toHaveBeenCalledWith('taco')
+    expect(result).toEqual([{ id: 't1' }])
+  })
+})
+
+describe('searchLocationAction', () => {
+  beforeEach(() => {
+    checkRateLimit.mockReset()
+    getClientIp.mockReset().mockResolvedValue('1.2.3.4')
+    geocodeAddress.mockReset()
+  })
+
+  it('returns null for an empty or whitespace query, without rate-limiting or geocoding', async () => {
+    expect(await searchLocationAction('   ')).toBeNull()
+    expect(checkRateLimit).not.toHaveBeenCalled()
+    expect(geocodeAddress).not.toHaveBeenCalled()
+  })
+
+  it('rate-limits by client IP before geocoding', async () => {
+    checkRateLimit.mockRejectedValue(new Error("You're doing that too often — try again in a bit."))
+
+    await expect(searchLocationAction('Austin, TX')).rejects.toThrow('too often')
+
+    expect(checkRateLimit).toHaveBeenCalledWith({}, '1.2.3.4')
+    expect(geocodeAddress).not.toHaveBeenCalled()
+  })
+
+  it('delegates to geocodeAddress with the trimmed query once unthrottled', async () => {
+    checkRateLimit.mockResolvedValue(undefined)
+    geocodeAddress.mockResolvedValue({ lat: 30.27, lng: -97.74 })
+
+    const result = await searchLocationAction('  Austin, TX  ')
+
+    expect(geocodeAddress).toHaveBeenCalledWith('Austin, TX')
+    expect(result).toEqual({ lat: 30.27, lng: -97.74 })
   })
 })

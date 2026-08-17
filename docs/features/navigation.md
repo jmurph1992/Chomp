@@ -123,8 +123,11 @@ since Profile is the truck's landing page) or
 
 ## Scope cuts (not built this pass)
 
-- **No search** — explicitly excluded. No `/search` route exists in the
-  app; adding one would be new feature work, not nav plumbing.
+- **No global nav search box** — explicitly excluded, still true after
+  roadmap item 7e added search (see `/docs/features/search.md`): that
+  search lives inside the discovery page's own controls
+  (`TruckListControls`), not the site-wide nav, and there's still no
+  `/search` route.
 - **No real-browser role-matrix e2e** (operator sees Dashboard, admin sees
   Admin, in an actual signed-in session) — this repo has no Clerk
   signed-in-test-user fixtures yet (`@clerk/testing`'s sign-in helper isn't

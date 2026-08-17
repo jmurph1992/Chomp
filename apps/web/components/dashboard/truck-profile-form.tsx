@@ -32,6 +32,8 @@ function VerificationStatusBanner({ truck }: { truck: TruckProfileEdit }) {
   )
 }
 
+const TIMEZONE_OPTIONS = Intl.supportedValuesOf('timeZone')
+
 export function TruckProfileForm({ truck }: { truck: TruckProfileEdit }) {
   const [name, setName] = useState(truck.name)
   const [description, setDescription] = useState(truck.description ?? '')
@@ -42,6 +44,7 @@ export function TruckProfileForm({ truck }: { truck: TruckProfileEdit }) {
   const [logoUrl, setLogoUrl] = useState(truck.logoUrl ?? '')
   const [coverUrl, setCoverUrl] = useState(truck.coverUrl ?? '')
   const [isActive, setIsActive] = useState(truck.isActive)
+  const [timezone, setTimezone] = useState(truck.timezone ?? '')
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -66,6 +69,7 @@ export function TruckProfileForm({ truck }: { truck: TruckProfileEdit }) {
           logoUrl: logoUrl.trim() || null,
           coverUrl: coverUrl.trim() || null,
           isActive,
+          timezone: timezone || null,
         })
         setStatus('saved')
       } catch (err) {
@@ -133,6 +137,26 @@ export function TruckProfileForm({ truck }: { truck: TruckProfileEdit }) {
         </div>
         <ImageUploadField label="Logo" value={logoUrl || null} onChange={setLogoUrl} />
         <ImageUploadField label="Cover image" value={coverUrl || null} onChange={setCoverUrl} />
+        <div>
+          <label className="block text-sm font-medium">Timezone</label>
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="mt-1 w-full rounded border p-2 text-sm"
+          >
+            <option value="">Not set</option>
+            {TIMEZONE_OPTIONS.map((tz) => (
+              <option key={tz} value={tz}>
+                {tz}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-500">
+            {timezone
+              ? 'Powers the "Open now" indicator on your truck\'s page.'
+              : 'Not set — the Open/Closed indicator won\'t show until you pick one.'}
+          </p>
+        </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
           Listed publicly

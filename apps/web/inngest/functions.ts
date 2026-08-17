@@ -1,14 +1,19 @@
 import { sendEmail } from '@/lib/email'
+import { getEventTitle } from '@/lib/events'
 import {
   activationEmailHtml,
+  getEventNotifyOptedInEmails,
   getOptedInFavoriterEmails,
   getTruckNameAndSlug,
+  newEventEmailHtml,
 } from '@/lib/favorite-notifications'
 import { refreshFeedView } from '@/lib/feed'
 import { openErasureBlockedEntry } from '@/lib/moderation-queue'
 import { removeAllPhotoLikesForUser } from '@/lib/review-photos'
 import { deactivateTrucks, eraseUserRow, findSoleOwnedTrucks, findUserByClerkId } from '@/lib/user-erasure'
+import { getOperatorEmails, verificationDecisionEmailHtml } from '@/lib/verification-notifications'
 import { inngest } from './client'
+import type { VerificationStatusValue } from '@chomp/types'
 
 type StepLike = { run: <T>(id: string, fn: () => Promise<T>) => Promise<T> }
 
@@ -105,4 +110,99 @@ export const notifyFavoritesOnActivationFunction = inngest.createFunction(
     triggers: [{ event: 'app/truck.activated' }],
   },
   notifyFavoritesOnActivationHandler,
+)
+
+type TruckEventCreatedEvent = { data: { truckId: string; eventId: string } }
+
+/**
+ * Fired from lib/events.ts#createEvent's action wrapper after a successful
+ * create. Same structure as notifyFavoritesOnActivationHandler, but opted
+ * into per truck (TruckFavorite.notifyNewEvents) rather than the User-level
+ * notifyFavoriteActive flag — see docs/features/events.md.
+ */
+export async function notifyFavoritesOnNewEventHandler({
+  step,
+  event,
+}: {
+  step: StepLike
+  event: TruckEventCreatedEvent
+}): Promise<void> {
+  const truck = await step.run('load-truck', () => getTruckNameAndSlug(event.data.truckId))
+  if (!truck) return // deleted between creation and this running
+
+  const truckEvent = await step.run('load-event', () => getEventTitle(event.data.eventId))
+  if (!truckEvent) return // deleted between creation and this running
+
+  const recipients = await step.run('load-opted-in-favoriters', () =>
+    getEventNotifyOptedInEmails(event.data.truckId),
+  )
+  if (recipients.length === 0) return
+
+  await step.run('send-emails', () =>
+    Promise.allSettled(
+      recipients.map((email) =>
+        sendEmail({
+          to: email,
+          subject: `${truck.name} posted a new event: ${truckEvent.title}`,
+          html: newEventEmailHtml(truck, truckEvent),
+        }),
+      ),
+    ),
+  )
+}
+
+export const notifyFavoritesOnNewEventFunction = inngest.createFunction(
+  {
+    id: 'notify-favorites-on-new-event',
+    name: 'Notify favoriters when a truck posts a new event',
+    triggers: [{ event: 'app/truck.event-created' }],
+  },
+  notifyFavoritesOnNewEventHandler,
+)
+
+type TruckVerificationDecidedEvent = {
+  data: { truckId: string; decision: VerificationStatusValue; note: string | null }
+}
+
+/**
+ * Fired from lib/trucks.ts#verifyTruck/rejectTruck/holdTruck after every
+ * call — unlike the activation/new-event handlers above, there's no
+ * dedup/transition check: each call is a deliberate, low-frequency admin
+ * decision with its own (possibly updated) reason, not a high-frequency
+ * automatic trigger where re-notifying would be spammy. Always-on, no
+ * opt-in preference — see lib/verification-notifications.ts.
+ */
+export async function notifyOperatorsOnVerificationDecisionHandler({
+  step,
+  event,
+}: {
+  step: StepLike
+  event: TruckVerificationDecidedEvent
+}): Promise<void> {
+  const truck = await step.run('load-truck', () => getTruckNameAndSlug(event.data.truckId))
+  if (!truck) return // deleted between the decision and this running
+
+  const recipients = await step.run('load-operator-emails', () => getOperatorEmails(event.data.truckId))
+  if (recipients.length === 0) return
+
+  await step.run('send-emails', () =>
+    Promise.allSettled(
+      recipients.map((email) =>
+        sendEmail({
+          to: email,
+          subject: `${truck.name} — verification update`,
+          html: verificationDecisionEmailHtml(event.data.truckId, truck, event.data.decision, event.data.note),
+        }),
+      ),
+    ),
+  )
+}
+
+export const notifyOperatorsOnVerificationDecisionFunction = inngest.createFunction(
+  {
+    id: 'notify-operators-on-verification-decision',
+    name: "Notify operators when a truck's verification status changes",
+    triggers: [{ event: 'app/truck.verification-decided' }],
+  },
+  notifyOperatorsOnVerificationDecisionHandler,
 )

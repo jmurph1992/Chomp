@@ -144,6 +144,12 @@ export async function deleteReview(truckId: string, userId: string): Promise<voi
  * and when, overwriting whatever the previous moderation action left behind.
  * No permission check inside it; the caller (the server action) is
  * responsible for calling `requireAdmin()` first.
+ *
+ * Hiding also closes out every open ContentReport on this review (including
+ * whichever one an admin is acting through, if any) — see
+ * lib/reports.ts#resolveContentReport, which relies on this rather than
+ * separately updating the report row itself. Keeps this queue's existing
+ * hide button and the newer reports queue from diverging on the same review.
  */
 export async function setReviewVisibility(
   reviewId: string,
@@ -162,6 +168,13 @@ export async function setReviewVisibility(
       moderatedAt: new Date(),
     },
   })
+
+  if (!isVisible) {
+    await db.contentReport.updateMany({
+      where: { reviewId, status: 'open' },
+      data: { status: 'resolved', resolvedByUserId: moderatorUserId, resolvedAt: new Date(), resolutionNote: reason },
+    })
+  }
 }
 
 /**

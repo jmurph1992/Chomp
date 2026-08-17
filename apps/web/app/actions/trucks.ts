@@ -1,12 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import type { CreateTruckInput, TruckMapMarker, TruckProfileInput } from '@chomp/types'
-import { createTruck, deleteTruck, getNearbyTrucks, updateTruckProfile } from '@/lib/trucks'
+import type { CreateTruckInput, TruckMapMarker, TruckProfileInput, TruckSearchResult } from '@chomp/types'
+import { createTruck, deleteTruck, getNearbyTrucks, searchTrucksByName, updateTruckProfile } from '@/lib/trucks'
 import { DEFAULT_RADIUS_METERS, isValidLat, isValidLng } from '@/lib/geo'
+import { geocodeAddress } from '@/lib/geocoding'
 import { getCurrentUser } from '@/lib/auth'
 import { requireOperator } from '@/lib/operators'
-import { checkRateLimit, truckCreationLimiter } from '@/lib/rate-limit'
+import { checkRateLimit, getClientIp, locationSearchLimiter, truckCreationLimiter } from '@/lib/rate-limit'
 
 /**
  * Owner-only guard for deletion — requireOperator alone only proves the
@@ -29,6 +30,32 @@ export async function getNearbyTrucksAction(lat: number, lng: number): Promise<T
   }
   const user = await getCurrentUser()
   return getNearbyTrucks(lat, lng, DEFAULT_RADIUS_METERS, user?.id)
+}
+
+/**
+ * Unbounded name search — no auth required, same public-read posture as
+ * getNearbyTrucksAction, and no rate limiting for the same reason (a plain
+ * indexless `contains` query, cheap at this data volume).
+ */
+export async function searchTrucksByNameAction(query: string): Promise<TruckSearchResult[]> {
+  return searchTrucksByName(query)
+}
+
+/**
+ * Geocodes a typed city/zip/address so the caller can re-center the nearby
+ * search there (see TruckDiscovery — the result feeds into the exact same
+ * setCenter + getNearbyTrucksAction path the geolocation callback uses).
+ * Unlike searchTrucksByNameAction, this is rate-limited: each call is a
+ * real, metered Mapbox Geocoding API request. Keyed by IP, not a user id —
+ * this is the first anonymous-callable action in the app to need rate
+ * limiting at all, see lib/rate-limit.ts#getClientIp.
+ */
+export async function searchLocationAction(query: string): Promise<{ lat: number; lng: number } | null> {
+  const trimmed = query.trim()
+  if (!trimmed) return null
+
+  await checkRateLimit(locationSearchLimiter, await getClientIp())
+  return geocodeAddress(trimmed)
 }
 
 /**

@@ -24,6 +24,9 @@
 | [Navigation](./features/navigation.md) | Done | Site-wide responsive nav (desktop row / mobile drawer), role-filtered links, smart back-nav on the truck page, operator dashboard breadcrumbs |
 | [Email (Resend)](./features/email.md) | Plumbing only | `sendEmail()` foundation — first consumer is favorite-activation notifications; roadmap item 7h still unbuilt |
 | [Favorite Activation Notifications](./features/favorite-notifications.md) | Done | Opt-in email (via `/account`) to a truck's favoriters when it goes "Active now" |
+| [Events](./features/events.md) | Done | Operator CRUD for truck events; public display on the truck page + live feed section; geocoded "Get Directions"; opt-in per-truck notification |
+| [Content Reporting](./features/content-reporting.md) | Done | Customer-facing report action on reviews and photos; new photo moderation capability; dedicated `/admin/reports` queue |
+| [Search](./features/search.md) | Done | Unbounded name search across all verified trucks; geocoded city/zip re-centering of the nearby search |
 
 ---
 

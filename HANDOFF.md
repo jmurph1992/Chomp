@@ -6,10 +6,10 @@
 ---
 
 ## Last Updated
-2026-08-16 (favorites filter + Resend plumbing + favorite-activation notifications, same day)
+2026-08-17 (roadmap item 7h — operator verification notification, same day as events, content reporting, search, and "Open now" — this closes the entire `future-plans/roadmap.md` list)
 
 ## Current Phase
-**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list was closed as of the 2026-08-12 session. **This session (2026-08-13) built two more, back to back**: **location freshness / "Active now"** (roadmap item 0, see below and `/docs/features/operator-dashboard.md#location-updates`) — an operator posting a location now also declares how long they'll be there (presets 1h/2h/3h/4h/6h/All day, "All day" = end of local calendar day), and a truck whose window has lapsed drops out of "nearby" map results while still showing on its own direct-link page with a muted "last active" state instead of the green "Active now" badge; an Extend action lets an operator push the expiry out without re-sharing GPS, only while still active. No migration needed — `TruckLocation.expiresAt` already existed, unused, since the first migration. Then, once the user flagged it mid-session, **a nearby-trucks list view + filter/sort** (roadmap item 0b, see below and `/docs/features/map.md#list-view`) — a Map/List toggle on the root page showing the exact same filtered set the map does, sortable by distance/rating, filterable by cuisine/minimum rating; required first lifting `TruckMap`'s internal geolocation-refetch out into a new `TruckDiscovery` wrapper so a sibling list view could see the same data. **Then, at the user's request, a second product gap-analysis pass** (roadmap item 7, a-h) re-surfaced 8 candidate gaps — the closest match to a named-but-unbuilt original scope item is `TruckEvent` (special appearances/events, fully modeled in the schema, explicitly commented "Planned feature — not yet wired to the UI," never scoped this session); the one item actually built this session is **b, a "Get Directions" link** on the truck detail page (Google Maps universal link, address-preferred with a coordinate fallback) — caught and fixed a real bug along the way (this schema has no `@db.Uuid` on any id column, so a `::uuid` cast broke a new raw-SQL `WHERE` comparison; found via a real Playwright run against the live dev DB, not unit tests). Items 0, 0b, and 7b are closed; the rest of item 7 (a, c-h) is flagged in the roadmap but not yet scoped. The app is ready to run/deploy against real data. **This session (2026-08-16)** scoped and built two more of item 7's smaller gaps: **item 7g, a "show only my favorites" filter** (signed-in only, matches a truck favorited directly or via any of its menu items, `getNearbyTrucks` gained `hasFavoritedMenuItem` kept deliberately separate from `isFavorited` — see below and `/docs/features/map.md#my-favorites-filter`), and **Resend plumbing** (`apps/web/lib/email.ts`, a bare `sendEmail()` foundation with no product consumer yet, sending from Resend's shared test domain — see below and `/docs/features/email.md`) as a shared prerequisite for items 7d and 7h. The Resend plumbing was manually verified end-to-end (a scoped "Sending access only" API key, real send confirmed) — along the way, discovered Resend's shared test domain only delivers to the account's own registered email until a domain is verified, documented in `/docs/features/email.md` for whoever tests 7h next. **Then, same session, item 7d itself got scoped and built**: opt-in (off by default, toggled on `/account`) email to a truck's direct favoriters when it goes "Active now," firing only on a real off→on activation transition, delivered async via a new Inngest event/function pair — see below and `/docs/features/favorite-notifications.md`. A new migration (`20260816225240_add_notify_favorite_active`) was presented and approved before running. Item 7h remains unscoped.**
+**Clerk auth, map view, truck detail page (profile + schedule + menu + reviews + photos + favorites), the public feed, the operator dashboard (now including manager invites, ownership transfer, and truck deletion), photo upload (R2 + Cloudflare Images hybrid), a full customer-facing account page (profile + favorites + reviews), and a mobile-first site-wide nav (desktop row / mobile drawer, smart back-nav, dashboard breadcrumbs) all wired up and code-complete. All migrations are applied to the Neon dev DB (11 total, latest adds the two favorites tables). Real Clerk, Mapbox, Cloudflare (R2 + Images), and Upstash Redis credentials are in `apps/web/.env.local` and verified working end-to-end. Cloudflare credentials are least-privilege: a dedicated R2 token scoped to only the `chomp-uploads` bucket, and a separate Images-only general API token. The Neon dev DB is seeded (6 trucks, reviews, a liked photo, refreshed feed — no manager fixtures, see "Not yet done" below). Local dev experience (roadmap item 1) is solid: a `postinstall` hook keeps the Prisma Client from going stale, a husky pre-commit hook catches schema/lockfile drift before it's committed, and the Clerk webhook tunnel workflow is documented. Rate limiting (roadmap item 2) is done: review submission, truck creation, upload-slot requests, and invite creation are all limited via a shared Upstash Redis primitive. Truck verification is built: new trucks are hidden from the map/public page until an admin approves them via `/admin/trucks`, and a previously verified truck can be pulled back off the map ("on hold"). Review moderation is built: `/admin/reviews` is a full queue (filterable, reason-required hide/unhide, audit trail), and excludes orphaned (truck-deleted) reviews. The feed's daily refresh is automatic: an Inngest-scheduled function replaced the old manual `CRON_SECRET` route — verified working locally against the Inngest Dev Server, though production activation still needs an Inngest Cloud app + sync once actually deployed (Open Item 17). The R2 bucket lifecycle rule for orphaned uploads is configured (`expire-orphaned-uploads`, 1 day). Manager invites, ownership transfer, and truck deletion are all built (see prior sessions below) — every item on the "operational completeness" roadmap list is done. `/account`: embeds Clerk's own `<UserProfile />` for profile editing, a read-only list of everything the signed-in user has ever reviewed (including orphaned ones, shown as "(deleted)" rather than disappearing — this is what closes the orphaned-reviews gap from the truck-deletion session), and now **favorites** too — a private (no public count) save list for trucks and individual menu items, with toggle buttons on the truck detail page, its menu items, and (the one genuinely new UI pattern this session) the map's popups, which are raw DOM rather than React. Account deletion/erasure handling (roadmap item 4) is now also done (2026-08-11, see below and `/docs/features/account-erasure.md`): `user.deleted` hands off to an Inngest job that hard-deletes the `User` row, anonymizing (not deleting) their reviews/photos; a user who's the sole owner of a truck is never auto-resolved — blocked and routed to a new generic admin moderation queue instead, which doubles as this app's first-ever in-app admin user-management surface (`/admin/users`, `/admin/moderation`). A 12th migration is applied for this. Mobile-first nav (roadmap item 6) is now **done** (2026-08-12, see below and `/docs/features/navigation.md`) — the last item on the roadmap that was still open. A site-wide responsive nav (desktop inline row / mobile hamburger + `Sheet` drawer, shadcn/ui's first real usage in this repo), role-filtered Dashboard/Admin links (fixing a bug where any signed-in user saw "Dashboard"), smart back-nav on the truck detail page, and breadcrumbs in the operator dashboard are all built and tested. With this, every item on the whole `future-plans/roadmap.md` list was closed as of the 2026-08-12 session. **This session (2026-08-13) built two more, back to back**: **location freshness / "Active now"** (roadmap item 0, see below and `/docs/features/operator-dashboard.md#location-updates`) — an operator posting a location now also declares how long they'll be there (presets 1h/2h/3h/4h/6h/All day, "All day" = end of local calendar day), and a truck whose window has lapsed drops out of "nearby" map results while still showing on its own direct-link page with a muted "last active" state instead of the green "Active now" badge; an Extend action lets an operator push the expiry out without re-sharing GPS, only while still active. No migration needed — `TruckLocation.expiresAt` already existed, unused, since the first migration. Then, once the user flagged it mid-session, **a nearby-trucks list view + filter/sort** (roadmap item 0b, see below and `/docs/features/map.md#list-view`) — a Map/List toggle on the root page showing the exact same filtered set the map does, sortable by distance/rating, filterable by cuisine/minimum rating; required first lifting `TruckMap`'s internal geolocation-refetch out into a new `TruckDiscovery` wrapper so a sibling list view could see the same data. **Then, at the user's request, a second product gap-analysis pass** (roadmap item 7, a-h) re-surfaced 8 candidate gaps — the closest match to a named-but-unbuilt original scope item is `TruckEvent` (special appearances/events, fully modeled in the schema, explicitly commented "Planned feature — not yet wired to the UI," never scoped this session); the one item actually built this session is **b, a "Get Directions" link** on the truck detail page (Google Maps universal link, address-preferred with a coordinate fallback) — caught and fixed a real bug along the way (this schema has no `@db.Uuid` on any id column, so a `::uuid` cast broke a new raw-SQL `WHERE` comparison; found via a real Playwright run against the live dev DB, not unit tests). Items 0, 0b, and 7b are closed; the rest of item 7 (a, c-h) is flagged in the roadmap but not yet scoped. The app is ready to run/deploy against real data. **This session (2026-08-16)** scoped and built two more of item 7's smaller gaps: **item 7g, a "show only my favorites" filter** (signed-in only, matches a truck favorited directly or via any of its menu items, `getNearbyTrucks` gained `hasFavoritedMenuItem` kept deliberately separate from `isFavorited` — see below and `/docs/features/map.md#my-favorites-filter`), and **Resend plumbing** (`apps/web/lib/email.ts`, a bare `sendEmail()` foundation with no product consumer yet, sending from Resend's shared test domain — see below and `/docs/features/email.md`) as a shared prerequisite for items 7d and 7h. The Resend plumbing was manually verified end-to-end (a scoped "Sending access only" API key, real send confirmed) — along the way, discovered Resend's shared test domain only delivers to the account's own registered email until a domain is verified, documented in `/docs/features/email.md` for whoever tests 7h next. **Then, same session, item 7d itself got scoped and built**: opt-in (off by default, toggled on `/account`) email to a truck's direct favoriters when it goes "Active now," firing only on a real off→on activation transition, delivered async via a new Inngest event/function pair — see below and `/docs/features/favorite-notifications.md`. A new migration (`20260816225240_add_notify_favorite_active`) was presented and approved before running. Item 7h remains unscoped.** **This session (2026-08-17) built item 7a, special events** — the closest match to a named-but-unbuilt original scope item (`TruckEvent` existed fully in the schema since init, explicitly commented "Planned feature — not yet wired to the UI") is now wired up end-to-end: full operator CRUD at `/dashboard/[truckId]/events`, a new "Upcoming Events" section on the truck detail page plus a **live** (not materialized-view) section on `/feed`, Mapbox geocoding of the typed address for a "Get Directions" link (reusing `NEXT_PUBLIC_MAPBOX_TOKEN`, top match auto-accepted, never blocks creation on a miss), and an opt-in-per-truck notification (`TruckFavorite.notifyNewEvents`, toggled on the truck's own page, requires already favoriting) via a new `app/truck.event-created` Inngest event/function pair. See `/docs/features/events.md`. A new migration (`20260817184420_add_notify_new_events`) was presented and approved before running. Manually verified end-to-end against the real Neon dev DB and a running Inngest Dev Server: real Mapbox geocode hit/miss, event CRUD including the truckId-scoped IDOR check, the "upcoming" filter on both the truck page and feed reads, the `app/truck.event-created` event firing and the notification function running (0 recipients, since nobody had opted in — email send itself wasn't exercised, same untested-in-practice gap `favorite-notifications.md` already has), and real page renders of both `/trucks/taco-kings` and `/feed` showing the new section and a working Get Directions link. **Not verified**: the dashboard editor UI and the notify-toggle click interaction in an actual browser — this repo has no documented way to sign in locally as a seeded operator without real Clerk credentials, so those paths were exercised at the `lib/events.ts`/`app/actions/events.ts` level (unit tests + the DB-level manual script) rather than through the browser. **Then, same day, item 7c — customer content reporting** — was scoped and built: a "Report" action on both reviews and their attached photos (fixed reason categories + optional note, one report per user per item, rate-limited), triaged through a new dedicated `/admin/reports` queue. Important finding along the way: `ModerationQueueEntry` (the existing "generic" queue table) turned out **not** to be safely reusable for this — its resolve/dismiss functions hard-code Clerk account deletion/unban logic specific to the erasure-blocked use case — so a new `ContentReport` model was built instead. Also built photo moderation from scratch (`ReviewPhoto` had `isVisible` but zero admin hide/unhide capability before this), mirroring `Review`'s existing moderation fields exactly. Resolving a report hides the content and auto-closes every other open report on the same item; the *existing* `/admin/reviews` hide button now does the same, so the two moderation entry points can't diverge. A new migration (`20260817200058_add_content_reporting`) was presented and approved before running. Manually verified end-to-end against the real Neon dev DB (throwaway script): own-content rejection, duplicate-report rejection, a real resolve that both hid the review and closed the report, a real dismiss that left the photo untouched, and the auto-resolve cascade across two open reports on the same review. See `/docs/features/content-reporting.md`. **Then, same day, item 7e — search** — was scoped and built: two independent controls in `TruckListControls`. Two findings shaped it: `TruckLocation.city`/`state`/`zip` are dead columns (nothing ever writes them — `postLocation` only saves a free-text `address`), and the discovery page had no unbounded truck lookup at all before this (`getNearbyTrucks` is geolocation-bounded, radius-limited, capped at 100). Built as (1) a real, unbounded name search (`searchTrucksByName` — any verified truck regardless of distance, not a client-side filter over the nearby set) whose results replace the Map/List view with a lightweight results list, and (2) "city/zip" reinterpreted as re-centering rather than text-matching — geocode the typed string via `lib/geocoding.ts` (built for events) and run it through the exact same `setCenter`/`getNearbyTrucksAction` path the geolocation callback already uses. Also added `lib/rate-limit.ts#getClientIp` and a new `locationSearchLimiter` — the first IP-keyed rate limiter in the app, since `searchLocationAction` is the first anonymous-callable action that needed one (every other limiter keys off a signed-in user id; this one has a real per-call Mapbox cost but no auth requirement). See `/docs/features/search.md`. No schema change, no migration. Manually verified against the real Neon dev DB: `next dev` + curl confirmed both search inputs render on `/` with no server error, and a throwaway script confirmed `searchTrucksByName`'s partial/case-insensitive match, its verified-only gate (created and deleted a throwaway unverified truck to prove it's excluded), and a real `geocodeAddress` lookup for "Austin, TX". **Then, same day, item 7f — "Open now" indicator** — was scoped and built: a new manual `Truck.timezone` field (IANA identifier, set on the profile form, not auto-derived from a posted location — works immediately at truck creation, no new dependency) unblocked it. `@chomp/utils/open-now.ts#getOpenNowStatus` (new, pure, real Intl-timezone-aware — proven with two different zones producing different results for the same instant/schedule, not a UTC pass-through in disguise) computes whether the truck-local time falls inside a posted, non-cancelled `TruckSchedule` window; truck detail page only, a green "Open now — until {time}" / muted "Closed" badge, no badge at all for a truck with no timezone set (exact same plain-text fallback as before this field existed — verified with a real page render both ways). Deliberately kept independent of "Active now" — the app's own naming already reserved "Open now" for this. Caught and fixed an adjacent pre-existing bug along the way: `formatTime` in both the truck detail page and the schedule editor rendered stored schedule times via `toLocaleTimeString` with no `timeZone`, so display depended on the *server's* own local timezone rather than reading back the literal wall-clock value the operator typed — both now pass `timeZone: 'UTC'` explicitly. Same-day windows only this pass (no overnight-crossing support), no "opens at X" forward-scan for the closed state, no map/list surface. A new migration (`20260817214106_add_truck_timezone`) was presented and approved before running. Manually verified end-to-end against the real Neon dev DB: a throwaway script confirmed `getOpenNowStatus` correctly returns `unknown` before a timezone is set, computes the real current status correctly against the seed truck's actual schedule once one is set (both the negative "closed" case for the real current moment and a synthetic positive "open" case), and a real page render confirmed the badge appears when set and is absent (exact prior fallback behavior) when not — timezone reverted to null afterward, no lasting change to seed data. **Then, same day, item 7h — operator notification on verification decisions** — was scoped and built, closing the last open item on the entire `future-plans/roadmap.md` list. Every operator on a truck (owner + managers, no `role` filter — same "manager parity" reasoning applied everywhere else) now gets an email whenever an admin verifies, rejects, or holds their truck; always-on with no opt-in preference, unlike this app's other two email consumers, since this is core status info about the operator's own truck, not a discretionary alert. `verifyTruck`/`rejectTruck`/`holdTruck` (`lib/trucks.ts`) each fire `app/truck.verification-decided` after their write, deliberately with **no dedup/transition check** — every call notifies, including a re-reject with an updated reason, since each is a low-frequency deliberate admin decision, not a high-frequency automatic trigger where spam is a risk. New `lib/verification-notifications.ts` (`getOperatorEmails`, unfiltered so it includes the owner, unlike `lib/invites.ts#listManagers`; `verificationDecisionEmailHtml`, which links `verified` to the public truck page but `rejected`/`onHold` to the dashboard instead, since a non-verified truck's public page 404s) and `notifyOperatorsOnVerificationDecisionFunction` (`inngest/functions.ts`), same load-truck/load-recipients/`Promise.allSettled`-send shape as the other two Inngest email consumers. No schema change, no migration. See `/docs/features/truck-verification.md#operator-notification`. Manually verified end-to-end against the real Neon dev DB with a running Inngest Dev Server: a throwaway script called all three (`rejectTruck`/`holdTruck`/`verifyTruck`) against the seeded Taco Kings truck and restored its original status afterward; the Inngest dev log confirmed all three `app/truck.verification-decided` events fired with the correct payloads and the function ran for each; the app log showed a real `sendEmail` → real Resend API call attempted for each, failing only on the already-documented Resend sandbox constraint (`/docs/features/email.md`: the shared test domain can only deliver to the account's own registered address until a domain is verified) — confirming the code path is fully wired, and (via the `206`, not `500`, response) that one failed send genuinely doesn't fail the whole run even against the real Resend API, not just in mocked unit tests. **With this, every item on the entire `future-plans/roadmap.md` list is closed.**
 
 ---
 
@@ -211,15 +211,322 @@ pnpm dev
     2026-08-13**, same day, see "This session (2026-08-13, nearby list
     view)" below and `/docs/features/map.md#list-view`.
 25. **A second product gap-analysis pass, roadmap item 7** (a-h) — see "This
-    session (2026-08-13, gap-analysis + get directions)" below. Of the 8
-    findings, one (b, "Get Directions") was scoped and built the same
-    session; the rest (events, content reporting, favorites×freshness
-    notifications, plus four already-tracked re-surfaced items) are flagged
-    in `future-plans/roadmap.md` item 7 but **not yet scoped**. **Next up**:
-    events (item 7a) is the closest match to how location freshness itself
-    was found — a named original-scope capability (`TruckEvent`) sitting
-    fully dead in the schema — worth asking the user if that's next, or
-    picking from the rest of item 7.
+    session (2026-08-13, gap-analysis + get directions)" below. ~~b, "Get
+    Directions"~~ — **done 2026-08-13**. ~~g, "my favorites" filter~~ and
+    Resend plumbing (prerequisite for d/h) — **done 2026-08-16**. ~~d,
+    favorites × freshness notifications~~ — **done 2026-08-16**. ~~a,
+    special events~~ — **done 2026-08-17**, see "This session (2026-08-17,
+    events)" below and `/docs/features/events.md`. ~~c, customer content
+    reporting~~ — **done 2026-08-17**, same day, see "This session
+    (2026-08-17, content reporting)" below and
+    `/docs/features/content-reporting.md`. ~~e, search by name/city/zip~~ —
+    **done 2026-08-17**, same day, see "This session (2026-08-17, search)"
+    below and `/docs/features/search.md`. ~~f, "Open now" indicator~~ —
+    **done 2026-08-17**, same day, see "This session (2026-08-17, open
+    now)" below and `/docs/features/truck-detail.md`. ~~h, operator
+    notification on verification decisions~~ — **done 2026-08-17**, same
+    day, see "This session (2026-08-17, verification notifications)" below
+    and `/docs/features/truck-verification.md#operator-notification`.
+    **Every item on the whole `future-plans/roadmap.md` list is now
+    closed.**
+
+## This session (2026-08-17, verification notifications)
+
+Scoped and built roadmap item 7h, operator notification on verification
+decisions — **the last open item on the entire roadmap**. Full details in
+`/docs/features/truck-verification.md#operator-notification`; this is a
+summary.
+
+- **Scoping** (via `AskUserQuestion`, all recommended options chosen):
+  recipients are every operator on the truck (owner + managers, not just
+  the owner); all three admin decisions trigger it (verify, reject, *and*
+  hold — not just the bad-news cases); always-on with no opt-in
+  preference, unlike this app's other two email consumers, since this is
+  core status info an operator shouldn't be able to silently miss.
+- **Built**: `lib/verification-notifications.ts` (new —
+  `getOperatorEmails`, deliberately unfiltered by role so it includes the
+  owner, unlike `lib/invites.ts#listManagers`'s manager-only list;
+  `verificationDecisionEmailHtml`, three copy variants, `verified` linking
+  to the public truck page and `rejected`/`onHold` linking to the
+  dashboard instead since a non-verified truck's public page 404s).
+  `verifyTruck`/`rejectTruck`/`holdTruck` (`lib/trucks.ts`) each fire a new
+  `app/truck.verification-decided` Inngest event after their write.
+  `notifyOperatorsOnVerificationDecisionHandler`/`...Function`
+  (`inngest/functions.ts`), same load-truck/load-recipients/
+  `Promise.allSettled`-send shape as the two existing email consumers
+  (favorite-activation, new-event), registered in
+  `apps/web/app/api/inngest/route.ts`.
+- **Deliberate design choice, different from the other two consumers**: no
+  dedup/transition check — every call to `verifyTruck`/`rejectTruck`/`holdTruck`
+  notifies, including a re-reject with an updated reason. The
+  favorite-activation feature's off→on-only logic exists specifically to
+  avoid spamming a high-frequency automatic trigger (location posting);
+  this is the opposite shape — a rare, deliberate admin action where the
+  content (the reason) may genuinely have changed each time, so always
+  notifying is the more correct default, not an oversight.
+- **No schema change, no migration** this pass.
+- **Verification**: all new/extended unit tests pass (491 in `apps/web`),
+  `@chomp/web`/`@chomp/db` type-check clean. Manually verified end-to-end
+  against the real Neon dev DB with a running Inngest Dev Server: a
+  throwaway script called `rejectTruck`/`holdTruck`/`verifyTruck` in
+  sequence against the seeded Taco Kings truck (restoring its original
+  `verified` status afterward — no lasting change to seed data); the
+  Inngest dev log confirmed all three `app/truck.verification-decided`
+  events fired with the correct `{truckId, decision, note}` payloads and
+  the new function initialized for each; the app log showed a real
+  `sendEmail` call actually reaching the real Resend API for each,
+  failing only on the already-documented sandbox constraint (shared test
+  domain can only deliver to the account's own registered address) — not
+  a bug, and the `206` (not `500`) response confirmed
+  `Promise.allSettled`'s "one failed send doesn't fail the run" behavior
+  holds against the real API, not just in mocked tests.
+
+## This session (2026-08-17, open now)
+
+Scoped and built roadmap item 7f, the "Open now" indicator — full details
+in `/docs/features/truck-detail.md` (the badge itself) and
+`/docs/features/operator-dashboard.md#timezone-powers-open-now` (the new
+profile field); this is a summary.
+
+- **Discussion first** (the user asked to "talk about and scope out" this
+  one specifically): confirmed from the codebase's own docs that "Open
+  now" is a distinct, already-reserved concept from "Active now" —
+  `operator-dashboard.md` explicitly says the location-freshness feature
+  is named "Active now" *specifically* so "Open now" stays free for a
+  schedule-based indicator, which is what this session built.
+- **Scoping** (via `AskUserQuestion`): timezone source is a manual field on
+  the truck profile (not auto-derived from a posted location — no new
+  dependency, works immediately at truck creation); display is truck
+  detail page only; a truck with no timezone set falls back to exactly the
+  existing plain-text schedule display rather than showing a
+  guessed/wrong badge.
+- **Built**: `packages/utils/src/open-now.ts` (new — `getOpenNowStatus`,
+  pure, Intl-based real timezone conversion, also exports
+  `getLocalDateParts` so `lib/schedule.ts#getTodaysScheduleEntries` could
+  reuse the same "what day/date is it in this truck's zone" primitive
+  instead of a second copy), `lib/truck-validation.ts` gained
+  `isValidTimezone`, `TruckProfileInput`/`TruckDetail` gained `timezone`,
+  threaded through `getTruckForEdit`/`updateTruckProfile`/`getTruckBySlug`,
+  `truck-profile-form.tsx` gained a timezone `<select>` (options from
+  `Intl.supportedValuesOf('timeZone')` — built-in, zero new dependency,
+  same reasoning that ruled out an auto-derivation library), and
+  `components/open-now-status.tsx` (new, mirrors `LocationStatus`'s shape)
+  wired into the truck detail page.
+- **Adjacent bug caught and fixed**: `formatTime` in both the truck detail
+  page and `truck-schedule-editor.tsx` rendered stored schedule times via
+  `toLocaleTimeString` with no `timeZone` — since those stored values are
+  literal wall-clock readings (not real instants), this actually rendered
+  using the *server process's own* local timezone, which could disagree
+  with what the operator typed depending on server `TZ`. Both call sites
+  now pass `timeZone: 'UTC'` explicitly. Found because building precise
+  timezone-aware logic right next to this existing display code made the
+  latent bug obvious; flagged explicitly as a related fix, not silent
+  scope creep.
+- **Scope cuts, stated up front**: same-day windows only (an entry
+  crossing midnight isn't specially handled — would need to also check
+  *yesterday's* dayOfWeek entry after local midnight, real added
+  complexity for an edge-case schedule shape); no "opens at X" prediction
+  for the closed state (needs a forward scan across days); no map/list
+  badge or filter.
+- **Migration**: `20260817214106_add_truck_timezone` —
+  `trucks.timezone TEXT`, nullable, no default, no backfill. Presented and
+  approved before running; applied to the Neon dev DB, `prisma migrate
+  status` confirms no drift.
+- **Verification**: all new/extended unit tests pass (477 in `apps/web`,
+  74 in `packages/utils`, including two-different-timezones-same-instant
+  tests proving real conversion), `@chomp/web`/`@chomp/db` type-check
+  clean. Manually verified against the real Neon dev DB: a throwaway
+  script confirmed `getOpenNowStatus` returns `unknown` before a timezone
+  is set, correctly computes `closed` against the seed truck's real
+  schedule at the real current moment once `America/Chicago` was set (the
+  seed schedule is Tuesday 11am-2pm; "now" was a Monday), and a synthetic
+  all-day window proved the positive `open` path also works; a real page
+  render via `next dev` + curl confirmed the badge shows once a timezone
+  is set and is completely absent (exact prior behavior) once reverted to
+  `null`. Timezone reverted afterward — no lasting change to seed data.
+
+## This session (2026-08-17, search)
+
+Scoped and built roadmap item 7e, search by truck name/city/zip — full
+details in `/docs/features/search.md` (canonical write-up; this is a
+summary).
+
+- **Two findings, surfaced to the user before building** (both changed
+  what "search" needed to mean here): `TruckLocation.city`/`state`/`zip`
+  exist in the schema but are dead columns (`postLocation` only ever
+  writes a free-text `address` — same "planned but never wired" situation
+  `TruckEvent` was in before it got built two sessions ago); and the
+  discovery page had no unbounded truck lookup at all —
+  `getNearbyTrucks` is geolocation-bounded (radius-limited, capped at 100,
+  requires a current location row to appear).
+- **Scoping** (via `AskUserQuestion`): name search should be a real,
+  unbounded server search (not a client-side filter over the already-nearby
+  set — the recommended-but-not-chosen lighter option); "city/zip" search
+  reinterpreted as re-centering via geocoding rather than a literal text
+  match against the empty columns; the search UI lives inside the existing
+  map/list controls, not a new global nav search box.
+- **Built**: `lib/trucks.ts#searchTrucksByName` (new — unbounded,
+  verified/active-only, capped at 20), `app/actions/trucks.ts` gained
+  `searchTrucksByNameAction` (unauthenticated, unrate-limited, same
+  posture as the existing `getNearbyTrucksAction`) and
+  `searchLocationAction` (geocodes via `lib/geocoding.ts`, then the client
+  feeds the result through the same `setCenter`/`getNearbyTrucksAction`
+  path the geolocation callback already used — no new rendering path for
+  location search at all). `components/truck-list-controls.tsx` gained two
+  inline forms; `components/truck-discovery.tsx` gained
+  `nameSearchResults` state that swaps the Map/List content for a new,
+  deliberately lightweight `components/truck-search-results.tsx` (no
+  distance/rating/favorite toggle) until cleared.
+- **New pattern**: `lib/rate-limit.ts#getClientIp` + a new
+  `locationSearchLimiter` — the first IP-keyed rate limiter in the app.
+  Every existing limiter keys off a signed-in user id, but
+  `searchLocationAction` is the first anonymous-callable action with a
+  real per-call cost (a metered Mapbox API request) — this was a genuine
+  gap in the original plan text (which had said "no auth needed" for both
+  new actions without working through how an unauthenticated caller gets
+  rate-limited), caught and resolved during implementation rather than
+  left unaddressed.
+- **No schema change, no migration** this pass.
+- **Verification**: all new/extended unit tests pass (474 total in
+  `apps/web`), `@chomp/web`/`@chomp/db` type-check clean (the one
+  remaining failure, `packages/utils`' `dashboard-tabs.test.ts`, is the
+  same pre-existing, unrelated `noUncheckedIndexedAccess` error confirmed
+  during the events session — still untouched). Manually verified against
+  the real Neon dev DB: `next dev` + curl confirmed `/` renders both new
+  search inputs with no server error; a throwaway script (not committed)
+  confirmed a real partial/case-insensitive name match against seeded
+  data, the verified-only gate (created and deleted a throwaway
+  `pending`-status truck to prove it's excluded from results), and a real
+  `geocodeAddress` lookup for "Austin, TX" resolving to real coordinates.
+
+## This session (2026-08-17, content reporting)
+
+Scoped and built roadmap item 7c, customer content reporting — full
+details, decisions, and the security/testing rationale are in
+`/docs/features/content-reporting.md` (canonical write-up; this is a
+summary).
+
+- **Scoping** (via `AskUserQuestion`): reviews **and** photos both get
+  reporting (not reviews-only, the recommended default — this doubled the
+  pass's scope since photos had zero moderation capability before);
+  reports surface through a **separate dedicated `/admin/reports` queue**
+  (not folded into `/admin/reviews`); fixed reason categories (spam/
+  inappropriate/harassment/other) + optional note; one report per user per
+  item.
+- **Key finding, surfaced to the user before building**: `ModerationQueueEntry`
+  (the existing queue table used for erasure-blocked-by-sole-ownership,
+  whose schema comment frames it as generic/reusable) is **not** actually
+  safe to reuse for content reports — `resolveModerationEntry`/
+  `dismissModerationEntry` hard-code Clerk account deletion/unban/truck-
+  reactivation logic specific to the erasure use case. Built a new
+  `ContentReport` model instead, structurally similar but with its own
+  resolution semantics and no relation to `ModerationQueueEntry` at all.
+- **Built**: `lib/reports.ts` (new — `reportReview`/`reportReviewPhoto`
+  with own-content + duplicate-report rejection, `getAllContentReports`,
+  `resolveContentReport`/`dismissContentReport`), `lib/review-photos.ts`
+  gained `setReviewPhotoVisibility` (a direct mirror of
+  `lib/reviews.ts#setReviewVisibility` — the first-ever admin moderation
+  capability for photos), `app/actions/reports.ts` (new, rate-limited via
+  a new `reportLimiter`), `app/actions/admin.ts` gained
+  `resolveContentReportAction`/`dismissContentReportAction`, `/admin/reports`
+  (new page + `components/admin/report-queue.tsx`, filterable Open/
+  Resolved/Dismissed/All, same inline-reason-input pattern as
+  `/admin/reviews`), and `components/report-button.tsx` (new, shared by
+  both review and photo reports, wired into `components/truck-reviews.tsx`).
+- **Design decision**: `setReviewVisibility`/`setReviewPhotoVisibility`
+  themselves (not just the report-resolution path) now auto-close every
+  open `ContentReport` on an item whenever it's hidden — this means
+  `resolveContentReport` doesn't need its own separate "mark this report
+  resolved" step (the report being acted on is itself one of the rows that
+  update), and the *existing* `/admin/reviews` hide button now also closes
+  out any pending reports on a review it hides directly, keeping the two
+  moderation entry points from diverging.
+- **Migration**: `20260817200058_add_content_reporting` — adds
+  `review_photos.moderation_note`/`moderated_by_user_id`/`moderated_at`
+  (parity with `reviews`) and the new `content_reports` table + two enums.
+  No backfill. Presented and approved before running; applied to the Neon
+  dev DB, `prisma migrate status` confirms no drift.
+- **Verification**: all new/extended unit tests pass (465 total in
+  `apps/web`), `@chomp/web` type-checks clean. Manually verified against
+  the real Neon dev DB via two throwaway scripts (not committed, same
+  precedent as prior sessions): own-content rejection, duplicate-report
+  rejection, a real `reportReview`/`reportReviewPhoto`, `resolveContentReport`
+  actually hiding the review and marking the report resolved,
+  `dismissContentReport` leaving the photo untouched, and — the one
+  behavior worth a dedicated check — the auto-resolve cascade: two open
+  reports filed by different users against the same review, resolving one
+  via `resolveContentReport` confirmed the *other* also flipped to
+  `resolved`. All test data cleaned up afterward. Real page renders
+  confirmed via `next dev` + curl: the truck detail page still renders
+  correctly with the new `ReviewPhoto` moderation fields in place, and
+  `/admin/reports` correctly 404s for a non-admin/anonymous request. **Not
+  verified**: the actual `/admin/reports` authenticated view or the
+  customer-facing Report button's click flow in a real browser — same
+  standing gap as the events session, no documented way to sign in locally
+  as a seeded admin/customer without real Clerk credentials.
+- **Not built**: a standalone "browse all photos" admin page (photo
+  moderation surfaces only through the reports queue, deliberately —
+  wasn't asked for and would have been a third scope expansion beyond what
+  7c needed), admin notification when a new report comes in (pull-based
+  queue, same as every other admin queue in this app).
+
+## This session (2026-08-17, events)
+
+Scoped and built roadmap item 7a, special events — full details, decisions,
+and the security/testing rationale are in `/docs/features/events.md`
+(that's the canonical write-up; this is a summary).
+
+- **Scoping** (via `AskUserQuestion`, all recommended options chosen):
+  display on both the truck detail page and the feed (not map pins);
+  geocode the typed address via a new Mapbox Geocoding integration rather
+  than skip coordinates; the favoriter notification opt-in lives on the
+  truck's own page (not `/account`) and requires already favoriting;
+  full CRUD (not create/delete-only); the feed surface is a **live** query,
+  not folded into the `feed_items` materialized view (which only refreshes
+  daily — would be stale for a same-day announcement); the notify toggle
+  requires favoriting first (new `TruckFavorite.notifyNewEvents` column,
+  not a standalone subscription table); geocoding auto-accepts the top
+  match with no confirm step, and a miss never blocks creation.
+- **Built**: `lib/geocoding.ts` (new, Mapbox forward geocoding, reuses
+  `NEXT_PUBLIC_MAPBOX_TOKEN`), `lib/events.ts` (new, full CRUD + the
+  "upcoming" reads for both the truck page and feed — geom writes go
+  through a raw SQL follow-up `UPDATE` after the Prisma `create`, same
+  two-step pattern `lib/locations.ts#postLocation` uses), `app/actions/events.ts`
+  (new, `requireOperator` + `eventLimiter` rate limiting on create),
+  `/dashboard/[truckId]/events` (new tab + editor), `components/truck-events.tsx`
+  and `components/truck-event-notify-toggle.tsx` (new, wired into the truck
+  detail page), a live "Upcoming Events" block on `/feed`, and a new
+  `app/truck.event-created` Inngest event/function pair (mirrors
+  `notifyFavoritesOnActivationFunction` almost exactly). `TruckDetail`
+  gained `upcomingEvents` and `notifyNewEvents`.
+- **Migration**: `20260817184420_add_notify_new_events` —
+  `truck_favorites.notify_new_events BOOLEAN NOT NULL DEFAULT false`, no
+  backfill. Presented and approved before running; applied to the Neon dev
+  DB, `prisma migrate status` confirms no drift. `TruckEvent` itself needed
+  no schema change — fully migrated since `20260506222654_init`.
+- **Verification**: all new/extended unit tests pass (`apps/web` 432,
+  `packages/utils` 66), `@chomp/web`/`@chomp/db` type-check clean (a
+  pre-existing, unrelated `noUncheckedIndexedAccess` type error in
+  `packages/utils/src/dashboard-tabs.test.ts` predates this session — left
+  alone). `pnpm lint` isn't actually usable in this repo yet (`next lint`
+  drops into an interactive "no ESLint config found" setup wizard even in a
+  non-interactive shell, and its side-effect tsconfig.json rewrite was
+  reverted) — a pre-existing gap, not something this session introduced or
+  fixed. Manually verified against the real Neon dev DB + a real Inngest
+  Dev Server via a throwaway script (not committed, same precedent
+  `favorite-notifications.md` set): real Mapbox geocode hit and miss, event
+  create/update/delete including the truckId-scoped IDOR check, the
+  "upcoming" filter on both reads, the `app/truck.event-created` event
+  firing and the notify function running end-to-end (0 recipients — nobody
+  had opted in yet), and real HTML renders of `/trucks/taco-kings` and
+  `/feed` confirmed the new section and a working Get Directions link. All
+  test data cleaned up afterward. **Not verified**: the dashboard editor UI
+  and the notify-toggle click in an actual browser — no documented way to
+  sign in locally as a seeded operator without real Clerk credentials, so
+  those paths only got unit-test + DB-script coverage, not a live click-through.
+- **Not built**: map pins for events (deliberately, same reasoning Get
+  Directions/7b used to skip the map's raw-DOM popups), a geocoding
+  confirm/disambiguation step, recurring events.
 
 ## This session (2026-08-16, favorites filter + Resend plumbing)
 - **Scoped two of roadmap item 7's smaller, previously-unscoped gaps** (g and
