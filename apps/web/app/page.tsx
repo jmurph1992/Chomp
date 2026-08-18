@@ -23,8 +23,8 @@ export default async function HomePage() {
 
   return (
     <main className="flex min-h-screen flex-col p-8">
-      <h1 className="text-4xl font-bold">Chomp 🍔</h1>
-      <p className="mt-2 mb-6 text-lg text-gray-500">Food trucks near you.</p>
+      <h1 className="font-display text-4xl tracking-wide">Chomp</h1>
+      <p className="mt-2 mb-6 text-lg text-muted-foreground">Food trucks near you.</p>
       <TruckDiscovery
         initialTrucks={trucks}
         defaultCenter={DEFAULT_LOCATION}

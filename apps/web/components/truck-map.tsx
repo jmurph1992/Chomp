@@ -30,7 +30,7 @@ type Props = {
 function buildFavoriteButton(truck: TruckMapMarker): HTMLButtonElement {
   const button = document.createElement('button')
   button.type = 'button'
-  button.className = 'truck-popup-favorite'
+  button.className = 'truck-popup-favorite text-marigold disabled:opacity-50'
   let isFavorited = truck.isFavorited
   let pending = false
 
@@ -61,30 +61,56 @@ function buildFavoriteButton(truck: TruckMapMarker): HTMLButtonElement {
   return button
 }
 
-/** Builds popup DOM via textContent (never innerHTML) so operator-entered
- * truck names/addresses can never inject markup into the page. */
+/**
+ * Builds popup DOM via textContent (never innerHTML) so operator-entered
+ * truck names/addresses can never inject markup into the page.
+ *
+ * Styled as a .ticket-card (see globals.css) rather than inheriting the
+ * page's theme tokens: Mapbox's vendored CSS hardcodes the popup's own
+ * background to white with no text color set, so text used to fall back to
+ * inheriting --foreground — which flips to near-white in dark mode, giving
+ * white text on a white card. .ticket-card's colors are fixed regardless of
+ * theme, which fixes that and doubles as this app's one shared truck-card
+ * motif (see ticket-card.tsx for the React version used elsewhere).
+ */
 function buildPopupContent(truck: TruckMapMarker, viewerSignedIn: boolean): HTMLElement {
   const container = document.createElement('div')
-  container.className = 'truck-popup'
+  container.className = 'truck-popup ticket-card w-56 overflow-hidden'
+
+  const perforation = document.createElement('div')
+  perforation.className = 'ticket-card__perforation'
+  perforation.setAttribute('aria-hidden', 'true')
+  container.appendChild(perforation)
+
+  const body = document.createElement('div')
+  body.className = 'space-y-1 p-3'
+  container.appendChild(body)
+
+  const nameRow = document.createElement('div')
+  nameRow.className = 'flex items-start justify-between gap-2'
+  body.appendChild(nameRow)
 
   const name = document.createElement('strong')
+  name.className = 'font-display text-base leading-snug tracking-wide'
   name.textContent = truck.name
-  container.appendChild(name)
+  nameRow.appendChild(name)
 
   if (viewerSignedIn) {
-    container.appendChild(buildFavoriteButton(truck))
+    nameRow.appendChild(buildFavoriteButton(truck))
   }
 
   if (truck.cuisineType.length > 0) {
     const cuisine = document.createElement('p')
+    cuisine.className = 'text-sm text-char'
     cuisine.textContent = truck.cuisineType.join(', ')
-    container.appendChild(cuisine)
+    body.appendChild(cuisine)
   }
 
   const link = document.createElement('a')
   link.href = `/trucks/${truck.slug}`
+  link.className = 'mt-1 inline-block text-sm font-medium text-salsa underline underline-offset-2'
   link.textContent = 'View truck'
-  container.appendChild(link)
+  body.appendChild(link)
 
   return container
 }

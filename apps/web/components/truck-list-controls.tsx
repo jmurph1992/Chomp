@@ -71,7 +71,7 @@ export function TruckListControls({
               aria-pressed={selectedCuisines.includes(cuisine)}
               onClick={() => toggleCuisine(cuisine)}
               className={`rounded border px-2 py-1 ${
-                selectedCuisines.includes(cuisine) ? 'border-gray-900 bg-gray-900 text-white' : ''
+                selectedCuisines.includes(cuisine) ? 'border-primary bg-primary text-primary-foreground' : ''
               }`}
             >
               {cuisine}
@@ -85,7 +85,7 @@ export function TruckListControls({
           type="button"
           aria-pressed={minRating === null}
           onClick={() => onMinRatingChange(null)}
-          className={`rounded border px-2 py-1 ${minRating === null ? 'border-gray-900 bg-gray-900 text-white' : ''}`}
+          className={`rounded border px-2 py-1 ${minRating === null ? 'border-primary bg-primary text-primary-foreground' : ''}`}
         >
           Any rating
         </button>
@@ -95,7 +95,7 @@ export function TruckListControls({
             type="button"
             aria-pressed={minRating === preset}
             onClick={() => onMinRatingChange(preset)}
-            className={`rounded border px-2 py-1 ${minRating === preset ? 'border-gray-900 bg-gray-900 text-white' : ''}`}
+            className={`rounded border px-2 py-1 ${minRating === preset ? 'border-primary bg-primary text-primary-foreground' : ''}`}
           >
             {preset}+
           </button>
@@ -108,7 +108,7 @@ export function TruckListControls({
           aria-pressed={onlyFavorites}
           onClick={() => onOnlyFavoritesChange(!onlyFavorites)}
           className={`rounded border px-2 py-1 ${
-            onlyFavorites ? 'border-gray-900 bg-gray-900 text-white' : ''
+            onlyFavorites ? 'border-primary bg-primary text-primary-foreground' : ''
           }`}
         >
           My favorites

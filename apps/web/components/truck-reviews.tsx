@@ -14,6 +14,7 @@ import {
 } from '@/app/actions/review-photos'
 import { reportReviewAction, reportReviewPhotoAction } from '@/app/actions/reports'
 import { MAX_REVIEW_BODY_LENGTH, isValidReviewBody } from '@/lib/review-validation'
+import { StarRating } from '@/components/ui/star-rating'
 import { ReportButton } from './report-button'
 import { uploadToR2 } from './use-image-upload'
 
@@ -30,10 +31,13 @@ export function TruckReviews({ truckId, slug, reviews, summary, ownReview }: Pro
     <section className="mt-6">
       <h2 className="text-xl font-semibold">Reviews</h2>
       {summary.reviewCount > 0 ? (
-        <p className="mt-1 text-gray-500">
-          {summary.averageRating!.toFixed(1)} ★ ({summary.reviewCount} review
-          {summary.reviewCount === 1 ? '' : 's'})
-        </p>
+        <StarRating
+          rating={summary.averageRating!}
+          label={`${summary.averageRating!.toFixed(1)} (${summary.reviewCount} review${
+            summary.reviewCount === 1 ? '' : 's'
+          })`}
+          className="mt-1"
+        />
       ) : (
         <p className="mt-1 text-gray-500">No reviews yet.</p>
       )}
@@ -54,7 +58,7 @@ export function TruckReviews({ truckId, slug, reviews, summary, ownReview }: Pro
             <li key={review.id} className="border-t pt-4">
               <div className="flex items-baseline gap-2">
                 <span className="font-medium">{review.userDisplayName ?? 'Anonymous'}</span>
-                <span className="text-gray-500">{review.rating} ★</span>
+                <StarRating rating={review.rating} />
               </div>
               {review.body && <p className="mt-1 text-sm">{review.body}</p>}
               {review.photo && (

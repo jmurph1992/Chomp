@@ -11,7 +11,7 @@ type Props = {
 export function SiteHeader({ navLinks }: Props) {
   return (
     <header className="flex items-center justify-between gap-4 border-b p-4">
-      <Link href="/" className="text-sm font-semibold">
+      <Link href="/" className="font-display text-lg tracking-wide text-primary">
         Chomp
       </Link>
 

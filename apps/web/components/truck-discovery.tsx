@@ -89,7 +89,7 @@ export function TruckDiscovery({ initialTrucks, defaultCenter, viewerSignedIn }:
             role="radio"
             aria-checked={view === 'map'}
             onClick={() => setView('map')}
-            className={`rounded px-3 py-1 text-sm ${view === 'map' ? 'bg-gray-900 text-white' : ''}`}
+            className={`rounded px-3 py-1 text-sm ${view === 'map' ? 'bg-primary text-primary-foreground' : ''}`}
           >
             Map
           </button>
@@ -98,7 +98,7 @@ export function TruckDiscovery({ initialTrucks, defaultCenter, viewerSignedIn }:
             role="radio"
             aria-checked={view === 'list'}
             onClick={() => setView('list')}
-            className={`rounded px-3 py-1 text-sm ${view === 'list' ? 'bg-gray-900 text-white' : ''}`}
+            className={`rounded px-3 py-1 text-sm ${view === 'list' ? 'bg-primary text-primary-foreground' : ''}`}
           >
             List
           </button>

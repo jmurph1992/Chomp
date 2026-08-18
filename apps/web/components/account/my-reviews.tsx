@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import type { MyReviewView } from '@chomp/types'
+import { StarRating } from '@/components/ui/star-rating'
 
 /**
  * Read-only — editing/deleting a review still happens on the truck's own
@@ -25,7 +26,7 @@ export function MyReviews({ reviews }: { reviews: MyReviewView[] }) {
       {reviews.map((review) => (
         <li key={review.id} className="border-t pt-4">
           <div className="flex items-baseline justify-between">
-            <span className="text-gray-500">{review.rating} ★</span>
+            <StarRating rating={review.rating} />
             <span className="text-xs text-gray-400">
               {new Date(review.createdAt).toLocaleDateString()}
             </span>

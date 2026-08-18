@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from 'react'
 import type { AdminReviewView } from '@chomp/types'
 import { hideReviewAction, unhideReviewAction } from '@/app/actions/admin'
+import { StarRating } from '@/components/ui/star-rating'
 
 type Filter = 'all' | 'hidden' | 'visible'
 
@@ -68,11 +69,12 @@ function ReviewRow({ review }: { review: AdminReviewView }) {
   return (
     <li className="border-t pt-4">
       <div className="flex items-baseline justify-between">
-        <div>
-          <span className="font-medium">{review.truckName}</span>{' '}
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="font-medium">{review.truckName}</span>
           <span className="text-sm text-gray-500">
-            {review.userDisplayName ?? 'Anonymous'} ({review.userEmail}) · {review.rating} ★
+            {review.userDisplayName ?? 'Anonymous'} ({review.userEmail})
           </span>
+          <StarRating rating={review.rating} />
         </div>
         <span className="text-sm text-gray-500">{review.isVisible ? 'Visible' : 'Hidden'}</span>
       </div>

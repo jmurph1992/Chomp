@@ -6,6 +6,8 @@ import { SignedIn } from '@clerk/nextjs'
 import type { TruckMapMarker } from '@chomp/types'
 import { formatDistanceMiles } from '@chomp/utils'
 import { favoriteTruckAction, unfavoriteTruckAction } from '@/app/actions/favorites'
+import { StarRating } from '@/components/ui/star-rating'
+import { TicketCard } from '@/components/ui/ticket-card'
 
 type Props = {
   trucks: TruckMapMarker[]
@@ -18,25 +20,34 @@ type Props = {
  */
 export function TruckList({ trucks }: Props) {
   if (trucks.length === 0) {
-    return <p className="text-gray-500">No trucks match your filters.</p>
+    return <p className="text-muted-foreground">No trucks match your filters.</p>
   }
 
   return (
-    <ul className="divide-y">
+    <ul className="space-y-3">
       {trucks.map((truck) => (
-        <li key={truck.id} className="flex items-center justify-between gap-4 py-3">
-          <Link href={`/trucks/${truck.slug}`} className="flex-1">
-            <p className="font-medium">{truck.name}</p>
-            <p className="text-sm text-gray-500">
-              {formatDistanceMiles(truck.distanceMeters)}
-              {truck.cuisineType.length > 0 && ` · ${truck.cuisineType.join(', ')}`}
-              {' · '}
-              {truck.reviewCount > 0
-                ? `★ ${truck.averageRating!.toFixed(1)} (${truck.reviewCount})`
-                : 'No reviews yet'}
-            </p>
-          </Link>
-          <ListFavoriteButton truck={truck} />
+        <li key={truck.id}>
+          <TicketCard>
+            <div className="flex items-center justify-between gap-4">
+              <Link href={`/trucks/${truck.slug}`} className="flex-1">
+                <p className="font-display tracking-wide">{truck.name}</p>
+                <p className="mt-0.5 text-sm text-char">
+                  {formatDistanceMiles(truck.distanceMeters)}
+                  {truck.cuisineType.length > 0 && ` · ${truck.cuisineType.join(', ')}`}
+                </p>
+                {truck.reviewCount > 0 ? (
+                  <StarRating
+                    rating={truck.averageRating!}
+                    label={`${truck.averageRating!.toFixed(1)} (${truck.reviewCount})`}
+                    className="mt-1"
+                  />
+                ) : (
+                  <p className="mt-1 text-sm text-char">No reviews yet</p>
+                )}
+              </Link>
+              <ListFavoriteButton truck={truck} />
+            </div>
+          </TicketCard>
         </li>
       ))}
     </ul>
@@ -73,7 +84,7 @@ function ListFavoriteButton({ truck }: { truck: TruckMapMarker }) {
             setIsFavorited(!isFavorited)
           })
         }
-        className="text-lg disabled:opacity-50"
+        className="text-lg text-marigold disabled:opacity-50"
       >
         {isFavorited ? '♥' : '♡'}
       </button>

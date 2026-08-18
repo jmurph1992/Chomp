@@ -71,10 +71,10 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
             className="h-14 w-14 rounded-full object-cover"
           />
         )}
-        <h1 className="text-3xl font-bold">{truck.name}</h1>
+        <h1 className="font-display text-3xl tracking-wide">{truck.name}</h1>
         {/* getTruckBySlug only ever returns verified trucks (see lib/trucks.ts) — every
             truck that reaches this page is verified, so the badge is unconditional. */}
-        <span className="rounded bg-green-100 px-2 py-1 text-xs font-medium text-green-800">
+        <span className="rounded bg-basil/15 px-2 py-1 text-xs font-medium text-basil">
           Verified
         </span>
         <TruckFavoriteButton truckId={truck.id} slug={truck.slug} isFavorited={truck.isFavorited} />
@@ -102,7 +102,7 @@ export default async function TruckDetailPage({ params }: { params: Promise<{ sl
               href={directionsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block text-sm text-blue-600 underline"
+              className="inline-block text-sm font-medium text-salsa underline underline-offset-2"
             >
               Get Directions
             </a>

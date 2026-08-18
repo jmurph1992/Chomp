@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
-import { Geist } from 'next/font/google'
+import { Anton, Geist, Geist_Mono } from 'next/font/google'
 import { getNavLinksForUser } from '@chomp/utils'
 import { cn } from '@/lib/utils'
 import { getCurrentUser } from '@/lib/auth'
@@ -10,6 +10,10 @@ import { NavHistoryTracker } from '@/components/nav/nav-history-tracker'
 import './globals.css'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-sans' })
+const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-mono' })
+// Anton only ships one weight — it's already the boldest possible cut, used
+// sparingly (wordmark, page headings) rather than as a general text face.
+const anton = Anton({ subsets: ['latin'], weight: '400', variable: '--font-display' })
 
 /**
  * Root layout — wraps every page in the app.
@@ -33,7 +37,7 @@ export default async function RootLayout({
 
   return (
     <ClerkProvider>
-      <html lang="en" className={cn('font-sans', geist.variable)}>
+      <html lang="en" className={cn('font-sans', geist.variable, geistMono.variable, anton.variable)}>
         <body className="antialiased">
           <NavHistoryTracker />
           <SiteHeader navLinks={navLinks} />

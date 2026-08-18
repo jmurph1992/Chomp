@@ -4,6 +4,8 @@ import type { FeedItem, TruckEventView } from '@chomp/types'
 import { timeAgo } from '@chomp/utils'
 import { getFeedPage, parsePageParam } from '@/lib/feed'
 import { getUpcomingEventsForFeed } from '@/lib/events'
+import { StarRating } from '@/components/ui/star-rating'
+import { TicketCard } from '@/components/ui/ticket-card'
 
 const FEED_EVENTS_LIMIT = 10
 
@@ -29,13 +31,13 @@ export default async function FeedPage({
 
   return (
     <main className="mx-auto max-w-2xl p-8">
-      <h1 className="text-3xl font-bold">Feed</h1>
-      <p className="mt-1 text-gray-500">Recent highly-rated reviews and popular photos.</p>
+      <h1 className="font-display text-3xl tracking-wide">Feed</h1>
+      <p className="mt-1 text-muted-foreground">Recent highly-rated reviews and popular photos.</p>
 
       {upcomingEvents.length > 0 && (
         <section className="mt-6">
           <h2 className="text-xl font-semibold">Upcoming Events</h2>
-          <ul className="mt-2 space-y-3">
+          <ul className="mt-3 space-y-3">
             {upcomingEvents.map((event) => (
               <FeedEventCard key={event.id} event={event} />
             ))}
@@ -44,9 +46,9 @@ export default async function FeedPage({
       )}
 
       {items.length === 0 ? (
-        <p className="mt-6 text-gray-500">No recent activity yet.</p>
+        <p className="mt-6 text-muted-foreground">No recent activity yet.</p>
       ) : (
-        <ul className="mt-6 space-y-6">
+        <ul className="mt-6 space-y-4">
           {items.map((item) => (
             <FeedItemCard key={item.itemId} item={item} />
           ))}
@@ -80,49 +82,53 @@ function FeedEventCard({
   const end = formatEventDateTime(event.endsAt)
 
   return (
-    <li className="border-t pt-4 text-sm">
-      <Link href={`/trucks/${event.truckSlug}`} className="font-medium text-gray-900">
-        {event.truckName}
-      </Link>
-      <p className="mt-1 font-medium">{event.title}</p>
-      {(start || end) && (
-        <p className="text-gray-500">
-          {start ?? '—'}
-          {end ? ` – ${end}` : ''}
-        </p>
-      )}
-      {event.address && <p className="text-gray-500">{event.address}</p>}
+    <li>
+      <TicketCard className="text-sm">
+        <Link href={`/trucks/${event.truckSlug}`} className="font-display text-sm tracking-wide text-griddle">
+          {event.truckName}
+        </Link>
+        <p className="mt-1 font-medium">{event.title}</p>
+        {(start || end) && (
+          <p className="text-char">
+            {start ?? '—'}
+            {end ? ` – ${end}` : ''}
+          </p>
+        )}
+        {event.address && <p className="text-char">{event.address}</p>}
+      </TicketCard>
     </li>
   )
 }
 
 function FeedItemCard({ item }: { item: FeedItem }) {
   return (
-    <li className="border-t pt-4">
-      <div className="flex items-baseline gap-2 text-sm text-gray-500">
-        <Link href={`/trucks/${item.truckSlug}`} className="font-medium text-gray-900">
-          {item.truckName}
-        </Link>
-        <span>{item.authorDisplayName ?? 'Anonymous'}</span>
-        <span>{timeAgo(item.createdAt)}</span>
-      </div>
+    <li>
+      <TicketCard>
+        <div className="flex items-baseline gap-2 text-sm text-char">
+          <Link href={`/trucks/${item.truckSlug}`} className="font-display text-sm tracking-wide text-griddle">
+            {item.truckName}
+          </Link>
+          <span>{item.authorDisplayName ?? 'Anonymous'}</span>
+          <span>{timeAgo(item.createdAt)}</span>
+        </div>
 
-      {item.type === 'review' && item.rating !== null && (
-        <p className="mt-1 text-sm text-gray-500">{item.rating} ★</p>
-      )}
+        {item.type === 'review' && item.rating !== null && (
+          <StarRating rating={item.rating} className="mt-1" />
+        )}
 
-      {item.imageUrl && (
-        <Image
-          src={item.imageUrl}
-          alt={item.content ?? item.truckName}
-          width={400}
-          height={300}
-          unoptimized
-          className="mt-2 max-h-80 w-full rounded object-cover"
-        />
-      )}
+        {item.imageUrl && (
+          <Image
+            src={item.imageUrl}
+            alt={item.content ?? item.truckName}
+            width={400}
+            height={300}
+            unoptimized
+            className="mt-2 max-h-80 w-full rounded object-cover"
+          />
+        )}
 
-      {item.content && <p className="mt-2 text-sm">{item.content}</p>}
+        {item.content && <p className="mt-2 text-sm">{item.content}</p>}
+      </TicketCard>
     </li>
   )
 }
