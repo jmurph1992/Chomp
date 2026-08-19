@@ -14,16 +14,18 @@ import type { NextConfig } from 'next'
  *   Prisma's native query engine binary (a .so.node file, not a JS import)
  *   in a pnpm monorepo — every DB-touching route 500'd in production with
  *   "could not locate the Query Engine" despite building and running fine
- *   locally (https://pris.ly/d/engine-not-found-nextjs). Marking just
+ *   locally (https://pris.ly/d/engine-not-found-nextjs). Marking
  *   @prisma/client external makes Vercel copy its whole resolved directory
- *   (engine binary included) instead of relying on that tracer. @chomp/db
- *   itself stays in transpilePackages below — it's plain TS source with no
- *   native binary of its own, so it still needs transpiling, not
- *   externalizing.
+ *   instead of relying on that tracer — but the engine binary actually
+ *   lives in the separately-resolved '.prisma/client' output directory
+ *   (what @prisma/client's own code requires internally), which needs to
+ *   be listed too or it's still left out. @chomp/db itself stays in
+ *   transpilePackages below — it's plain TS source with no native binary
+ *   of its own, so it still needs transpiling, not externalizing.
  */
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, '../..'),
-  serverExternalPackages: ['@prisma/client'],
+  serverExternalPackages: ['@prisma/client', '.prisma/client'],
   transpilePackages: ['@chomp/db', '@chomp/types', '@chomp/utils'],
   images: {
     remotePatterns: [
