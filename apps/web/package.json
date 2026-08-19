@@ -20,6 +20,7 @@
     "@chomp/types": "workspace:*",
     "@chomp/utils": "workspace:*",
     "@clerk/nextjs": "^6",
+    "@prisma/nextjs-monorepo-workaround-plugin": "^7.9.1",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.2",
     "class-variance-authority": "^0.7.1",
