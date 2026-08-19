@@ -4,7 +4,11 @@
 //       (ST_DWithin, ST_Distance) must use prisma.$queryRaw
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // "native" covers local dev; Vercel's serverless Function runtime needs
+  // its own engine binary explicitly listed or Prisma Client can't find a
+  // query engine at request time (https://pris.ly/d/engine-not-found-nextjs).
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
