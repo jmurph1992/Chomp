@@ -52,7 +52,7 @@ export function DeleteAccountSection({
       {blockingTrucks.length > 0 ? (
         <div className="mt-1 text-sm text-gray-500">
           <p>
-            You're the sole owner of {blockingTrucks.map((t) => t.name).join(', ')}. Transfer ownership
+            You&apos;re the sole owner of {blockingTrucks.map((t) => t.name).join(', ')}. Transfer ownership
             or delete {blockingTrucks.length > 1 ? 'them' : 'it'} before you can delete your account.
           </p>
           <ul className="mt-2 list-disc pl-5">

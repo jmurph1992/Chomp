@@ -11,7 +11,7 @@ vi.mock('@upstash/ratelimit', () => {
   class Ratelimit {
     static slidingWindow = vi.fn(() => ({}))
     limit = limit
-    constructor(_config: unknown) {}
+    constructor() {}
   }
   return { Ratelimit }
 })

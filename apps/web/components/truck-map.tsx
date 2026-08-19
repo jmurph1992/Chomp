@@ -139,6 +139,11 @@ export function TruckMap({ trucks, defaultCenter, center, viewerSignedIn }: Prop
     renderMarkers(map, markersRef, trucks, viewerSignedIn)
 
     return () => {
+      // Read live, not copied: renderMarkers reassigns markersRef.current to a
+      // new array (not an in-place mutation) whenever trucks/viewerSignedIn
+      // change, so a value captured here at mount time would go stale and
+      // leak whatever markers got added by later renders.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       markersRef.current.forEach((marker) => marker.remove())
       map.remove()
       mapRef.current = null

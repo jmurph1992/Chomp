@@ -21,6 +21,6 @@
   `/docs/features/operator-dashboard.md#truck-deletion`. Owner-only, type-the-
   name-to-confirm; reviews/photos are orphaned (kept, detached) rather than
   deleted, everything else truck-owned cascades.
-- **Image upload.** Logo, cover, and menu-item photos are all pasted-URL only,
-  same gap as `/go-live-requirements` items for menu/reviews — all blocked on
-  Cloudflare R2/Images.
+- ~~Image upload~~ — **done**, see `/docs/features/photo-upload.md`. Logo,
+  cover, and menu-item photos all go through the R2 + Cloudflare Images
+  hybrid upload flow.

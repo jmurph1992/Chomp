@@ -197,7 +197,7 @@ function ManagerRow({
       )}
       {isOwner && confirming === 'offer' && (
         <span className="flex items-center gap-2">
-          <span className="text-gray-500">Make {manager.email} the owner? You'll become a manager.</span>
+          <span className="text-gray-500">Make {manager.email} the owner? You&apos;ll become a manager.</span>
           <button onClick={offerOwnership} disabled={isPending} className="underline disabled:opacity-50">
             Confirm
           </button>
@@ -280,7 +280,7 @@ function PendingTransferOffer({ truckId }: { truckId: string }) {
 
   return (
     <section className="rounded border bg-gray-50 p-3 text-sm">
-      <p>You've been offered ownership of this truck.</p>
+      <p>You&apos;ve been offered ownership of this truck.</p>
       {confirming === null && (
         <div className="mt-2 flex items-center gap-3">
           <button onClick={() => setConfirming('accept')} disabled={isPending} className="underline disabled:opacity-50">
@@ -293,7 +293,7 @@ function PendingTransferOffer({ truckId }: { truckId: string }) {
       )}
       {confirming === 'accept' && (
         <div className="mt-2 flex items-center gap-2 text-gray-500">
-          <span>Accept ownership? You'll become the owner and the current owner will become a manager.</span>
+          <span>Accept ownership? You&apos;ll become the owner and the current owner will become a manager.</span>
           <button onClick={() => respond('accept')} disabled={isPending} className="underline disabled:opacity-50">
             Confirm
           </button>

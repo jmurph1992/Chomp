@@ -9,7 +9,7 @@ export default async function AdminReviewsPage() {
     <div>
       <h1 className="text-2xl font-bold">Review moderation</h1>
       <p className="mt-1 text-gray-500">
-        Hidden reviews never appear on a truck's public page. Every hide/unhide requires a reason.
+        Hidden reviews never appear on a truck&apos;s public page. Every hide/unhide requires a reason.
       </p>
       <AdminReviewQueue reviews={reviews} />
     </div>

@@ -41,6 +41,7 @@
   },
   "devDependencies": {
     "@clerk/testing": "^1",
+    "@eslint/eslintrc": "^3.3.6",
     "@playwright/test": "^1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10",
@@ -50,6 +51,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.23",
     "jsdom": "^25",
     "standardwebhooks": "^1",
     "tailwindcss": "^4",

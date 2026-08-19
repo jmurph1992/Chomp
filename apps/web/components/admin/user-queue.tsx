@@ -62,7 +62,7 @@ function UserRow({ user }: { user: AdminUserView }) {
       )}
 
       {user.role === 'admin' ? (
-        <p className="mt-2 text-sm text-gray-400">Admin accounts can't be deleted through this tool.</p>
+        <p className="mt-2 text-sm text-gray-400">Admin accounts can&apos;t be deleted through this tool.</p>
       ) : confirming ? (
         <div className="mt-2 flex items-center gap-2">
           <input

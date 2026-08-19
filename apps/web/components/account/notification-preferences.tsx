@@ -32,7 +32,7 @@ export function NotificationPreferences({ initialNotifyFavoriteActive }: Props) 
       <h2 className="text-xl font-bold">Notifications</h2>
       <label className="mt-4 flex items-center gap-2 text-sm">
         <input type="checkbox" checked={notifyFavoriteActive} onChange={toggle} />
-        Email me when a truck I've favorited goes active nearby
+        Email me when a truck I&apos;ve favorited goes active nearby
       </label>
       {error && <p className="mt-1 text-sm text-red-600">{error}</p>}
     </section>

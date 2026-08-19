@@ -41,14 +41,14 @@ export default async function InviteClaimPage({
       ) : user ? (
         <>
           <p className="mt-4 text-gray-500">
-            You've been invited to help manage {preview.truckName}.
+            You&apos;ve been invited to help manage {preview.truckName}.
           </p>
           <InviteClaimButton token={token} />
         </>
       ) : (
         <div className="mt-4 space-y-3">
           <p className="text-gray-500">
-            You've been invited to help manage {preview.truckName}. Sign in or create an account
+            You&apos;ve been invited to help manage {preview.truckName}. Sign in or create an account
             with the email this invite was sent to, then come back to this link to accept.
           </p>
           <div className="flex gap-4 text-sm">
