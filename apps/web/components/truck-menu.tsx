@@ -2,11 +2,11 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Image from 'next/image'
-import { SignedIn } from '@clerk/nextjs'
 import type { MenuCategoryView, MenuItemView } from '@chomp/types'
 import { formatUsd } from '@chomp/utils'
 import { getUniqueDietaryFlags, filterMenuByDietaryFlags } from '@/lib/menu'
 import { favoriteMenuItemAction, unfavoriteMenuItemAction } from '@/app/actions/favorites'
+import { SignedInSafe } from '@/components/signed-in-safe'
 
 type Props = {
   truckId: string
@@ -27,7 +27,7 @@ function MenuItemFavoriteButton({
   const [isPending, startTransition] = useTransition()
 
   return (
-    <SignedIn>
+    <SignedInSafe>
       <button
         type="button"
         disabled={isPending}
@@ -46,7 +46,7 @@ function MenuItemFavoriteButton({
       >
         {item.isFavorited ? '♥' : '♡'}
       </button>
-    </SignedIn>
+    </SignedInSafe>
   )
 }
 

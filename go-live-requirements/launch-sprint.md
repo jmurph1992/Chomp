@@ -44,36 +44,48 @@ This is the punch list for that sprint.
 
 ## Domain configuration
 
-Now that a real domain has been acquired, it needs to be entered in a few
-places:
+The real domain is **chompftf.com**. It needs to be entered in a few places:
 
 **In this codebase (env vars):**
 - `RESEND_FROM_EMAIL` — currently unset, so `lib/email.ts` falls back to
   the Resend sandbox address. Set to an address on the new domain (e.g.
-  `notifications@yourdomain.com`) once the domain is verified in Resend
+  `notifications@chompftf.com`) once the domain is verified in Resend
   (see below).
 - `NEXT_PUBLIC_APP_URL` — used by `appUrl()` (`lib/site-url.ts`) to build
   every absolute link that goes out in email (invite links, activation/
   event/verification emails). Currently unset, falls back to
-  `http://localhost:3000`. Set to `https://yourdomain.com`.
+  `http://localhost:3000`. Set to `https://chompftf.com`.
 
 **Outside the codebase (external dashboards):**
 - **Resend** — add the domain, add the DNS records it provides (SPF/DKIM/
   DMARC) at the domain's registrar/DNS host, wait for verification.
 - **Clerk** — add the production domain to allowed origins/redirect URLs,
-  point the webhook endpoint at `https://yourdomain.com/api/webhooks/clerk`
+  point the webhook endpoint at `https://chompftf.com/api/webhooks/clerk`
   (see blocker 4 above).
 - **Vercel** (or wherever it's deployed) — add the domain as a custom
   domain on the project, point DNS at it.
 - **Inngest Cloud** — once synced (blocker 2 above), it registers against
   this same production URL.
 
+## Demo deployment
+
+A second, separate deployment at `demo.chompftf.com` — read-only, seeded
+with sample data, no real user data or Clerk wiring at all. See
+`docs/features/demo-mode.md` for how it works. Its own env vars:
+- `DATABASE_URL`/`DIRECT_URL` — its own Neon branch, **not** the production
+  database. Seed it with `pnpm db:seed` after migrating.
+- `NEXT_PUBLIC_DEMO_MODE=true`
+- `NEXT_PUBLIC_SIGNUP_URL=https://chompftf.com/sign-up` — sends demo
+  visitors to the real production app to create a real account.
+- No Clerk/Resend/Inngest keys are required on this deployment (demo mode
+  never wires them up), but it does need its own Mapbox/Cloudflare/Upstash
+  credentials (or can reuse production's, see demo-mode.md) since browsing
+  the map and viewing photos still needs them.
+- DNS: a `demo` CNAME/A record pointed at Vercel, added as a custom domain
+  on the demo Vercel project (separate project from production).
+
 ## Not blocking, but worth doing during the sprint
 
-- `pnpm lint` isn't actually functional yet — `next lint` drops into an
-  interactive "no ESLint config found" setup wizard even in a
-  non-interactive shell (found during the 2026-08-17 events session). A
-  real ESLint config should get set up at some point; doesn't block launch.
-- `go-live-requirements/operator-dashboard.md` has one stale line claiming
-  image upload is "blocked on Cloudflare R2/Images" — that shipped long
-  ago (`docs/features/photo-upload.md`), just needs the line removed.
+Nothing outstanding here currently — the two items previously tracked
+(`next lint`'s non-functional config, the stale operator-dashboard line)
+were both resolved in the 2026-08-19 session.

@@ -27,6 +27,7 @@
 | [Events](./features/events.md) | Done | Operator CRUD for truck events; public display on the truck page + live feed section; geocoded "Get Directions"; opt-in per-truck notification |
 | [Content Reporting](./features/content-reporting.md) | Done | Customer-facing report action on reviews and photos; new photo moderation capability; dedicated `/admin/reports` queue |
 | [Search](./features/search.md) | Done | Unbounded name search across all verified trucks; geocoded city/zip re-centering of the nearby search |
+| [Demo Mode](./features/demo-mode.md) | Done | Read-only public `demo.<domain>` deployment with no Clerk wiring — sample data, write actions hidden or redirect to sign up on the real app |
 
 ---
 

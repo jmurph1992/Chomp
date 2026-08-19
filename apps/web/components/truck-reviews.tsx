@@ -14,6 +14,7 @@ import {
 } from '@/app/actions/review-photos'
 import { reportReviewAction, reportReviewPhotoAction } from '@/app/actions/reports'
 import { MAX_REVIEW_BODY_LENGTH, isValidReviewBody } from '@/lib/review-validation'
+import { isDemoMode, signupUrl } from '@/lib/demo'
 import { StarRating } from '@/components/ui/star-rating'
 import { ReportButton } from './report-button'
 import { uploadToR2 } from './use-image-upload'
@@ -42,14 +43,25 @@ export function TruckReviews({ truckId, slug, reviews, summary, ownReview }: Pro
         <p className="mt-1 text-gray-500">No reviews yet.</p>
       )}
 
-      <SignedOut>
+      {isDemoMode() ? (
         <p className="mt-4 text-gray-500">
-          <SignInButton mode="modal">Sign in</SignInButton> to write a review.
+          <a href={signupUrl()} className="underline">
+            Sign up
+          </a>{' '}
+          on the live app to write a review.
         </p>
-      </SignedOut>
-      <SignedIn>
-        <ReviewForm truckId={truckId} slug={slug} ownReview={ownReview} />
-      </SignedIn>
+      ) : (
+        <>
+          <SignedOut>
+            <p className="mt-4 text-gray-500">
+              <SignInButton mode="modal">Sign in</SignInButton> to write a review.
+            </p>
+          </SignedOut>
+          <SignedIn>
+            <ReviewForm truckId={truckId} slug={slug} ownReview={ownReview} />
+          </SignedIn>
+        </>
+      )}
 
       <ul className="mt-6 space-y-4">
         {reviews.map((review) => {
@@ -101,6 +113,10 @@ function PhotoLikeButton({
   photo: ReviewPhotoView
 }) {
   const [isPending, startTransition] = useTransition()
+
+  if (isDemoMode()) {
+    return <span className="mt-1 block text-sm text-gray-500">♡ {photo.likesCount}</span>
+  }
 
   return (
     <>

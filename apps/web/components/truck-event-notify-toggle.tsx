@@ -1,8 +1,8 @@
 'use client'
 
 import { useTransition } from 'react'
-import { SignedIn } from '@clerk/nextjs'
 import { updateEventNotifyPreferenceAction } from '@/app/actions/favorites'
+import { SignedInSafe } from '@/components/signed-in-safe'
 
 /**
  * Only rendered when the caller has already favorited this truck — enforces
@@ -27,7 +27,7 @@ export function TruckEventNotifyToggle({
   if (!isFavorited) return null
 
   return (
-    <SignedIn>
+    <SignedInSafe>
       <label className="flex items-center gap-1 text-sm text-gray-500">
         <input
           type="checkbox"
@@ -41,6 +41,6 @@ export function TruckEventNotifyToggle({
         />
         Notify me about new events
       </label>
-    </SignedIn>
+    </SignedInSafe>
   )
 }

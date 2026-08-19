@@ -1,15 +1,18 @@
 'use client'
 
 import { useTransition } from 'react'
-import { SignedIn } from '@clerk/nextjs'
 import { favoriteTruckAction, unfavoriteTruckAction } from '@/app/actions/favorites'
+import { SignedInSafe } from '@/components/signed-in-safe'
 
 /**
- * <SignedIn>-wrapped, same as PhotoLikeButton in truck-reviews.tsx — nothing
- * rendered for a signed-out visitor, no count (favorites are private, see
- * docs/features/account.md#favorites). No local state, same as
- * PhotoLikeButton — isFavorited is a server prop that refreshes via
- * revalidatePath after the action's round-trip, not an optimistic update.
+ * <SignedInSafe>-wrapped, same as PhotoLikeButton in truck-reviews.tsx —
+ * nothing rendered for a signed-out visitor (or in demo mode, where
+ * favoriting is hidden entirely rather than linking out to sign up — a
+ * low-stakes secondary action, not worth a CTA on every truck card), no
+ * count (favorites are private, see docs/features/account.md#favorites). No
+ * local state, same as PhotoLikeButton — isFavorited is a server prop that
+ * refreshes via revalidatePath after the action's round-trip, not an
+ * optimistic update.
  */
 export function TruckFavoriteButton({
   truckId,
@@ -23,7 +26,7 @@ export function TruckFavoriteButton({
   const [isPending, startTransition] = useTransition()
 
   return (
-    <SignedIn>
+    <SignedInSafe>
       <button
         type="button"
         disabled={isPending}
@@ -42,6 +45,6 @@ export function TruckFavoriteButton({
       >
         {isFavorited ? '♥' : '♡'}
       </button>
-    </SignedIn>
+    </SignedInSafe>
   )
 }

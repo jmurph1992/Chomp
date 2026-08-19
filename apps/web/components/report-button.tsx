@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { SignedIn } from '@clerk/nextjs'
 import type { ContentReportReasonValue } from '@chomp/types'
+import { SignedInSafe } from '@/components/signed-in-safe'
 
 const REASON_OPTIONS: { value: ContentReportReasonValue; label: string }[] = [
   { value: 'spam', label: 'Spam' },
@@ -36,7 +36,7 @@ export function ReportButton({
   }
 
   return (
-    <SignedIn>
+    <SignedInSafe>
       {isOpen ? (
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
           <select
@@ -84,6 +84,6 @@ export function ReportButton({
           Report
         </button>
       )}
-    </SignedIn>
+    </SignedInSafe>
   )
 }

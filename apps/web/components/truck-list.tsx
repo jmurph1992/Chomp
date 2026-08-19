@@ -2,12 +2,12 @@
 
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
-import { SignedIn } from '@clerk/nextjs'
 import type { TruckMapMarker } from '@chomp/types'
 import { formatDistanceMiles } from '@chomp/utils'
 import { favoriteTruckAction, unfavoriteTruckAction } from '@/app/actions/favorites'
 import { StarRating } from '@/components/ui/star-rating'
 import { TicketCard } from '@/components/ui/ticket-card'
+import { SignedInSafe } from '@/components/signed-in-safe'
 
 type Props = {
   trucks: TruckMapMarker[]
@@ -15,8 +15,8 @@ type Props = {
 
 /**
  * viewerSignedIn isn't needed here the way TruckMap needs it — this is real
- * React with normal context, so <SignedIn> (inside ListFavoriteButton) gates
- * itself directly, same as TruckFavoriteButton on the truck detail page.
+ * React with normal context, so <SignedInSafe> (inside ListFavoriteButton)
+ * gates itself directly, same as TruckFavoriteButton on the truck detail page.
  */
 export function TruckList({ trucks }: Props) {
   if (trucks.length === 0) {
@@ -68,7 +68,7 @@ function ListFavoriteButton({ truck }: { truck: TruckMapMarker }) {
   const [isPending, startTransition] = useTransition()
 
   return (
-    <SignedIn>
+    <SignedInSafe>
       <button
         type="button"
         disabled={isPending}
@@ -88,6 +88,6 @@ function ListFavoriteButton({ truck }: { truck: TruckMapMarker }) {
       >
         {isFavorited ? '♥' : '♡'}
       </button>
-    </SignedIn>
+    </SignedInSafe>
   )
 }
